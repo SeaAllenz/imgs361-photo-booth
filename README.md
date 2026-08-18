@@ -1,4 +1,4 @@
-# Photo Booth (INSTRUCTOR ONLY)
+# Photo Booth
 
 `Photo Booth` is the starting C++20 project for the semester-long photo booth assignment in **IMGS.361 Image Processing**. The starter code provides camera acquisition, typed TOML configuration, a minimal live-preview example, and a closely related photo-booth application with an explicit image-processing pipeline for students to extend throughout the semester.
 
