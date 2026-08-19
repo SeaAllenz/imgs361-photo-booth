@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # IMGS.361 Photo Booth - Virtual Camera
 #
-# Stops the FFmpeg process started by start_camera.sh.
+# Stops the FFmpeg process started by start_virtual_camera.sh.
 # ---------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
