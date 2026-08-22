@@ -22,9 +22,8 @@ rotation = 0
 window_name = "Photo Booth"
 
 [capture]
-# Used by the capture_single_image utility and available to the photo booth
-# when still-image capture is added later in the semester.
-output_filename = "captured_image.png"
+# Used by the capture_single_image utility and the photo booth.
+save_directory = "captures"
 
 # Number of frames discarded before a single-image capture.
 # This gives auto-exposure and automatic white balance time to settle.

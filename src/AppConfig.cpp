@@ -55,7 +55,7 @@ void validateConfigKeys(const toml::table& table) {
   }
 
   if (const auto* capture = table["capture"].as_table()) {
-    validateKeys(*capture, {"output_filename", "warmup_frames"}, "capture");
+    validateKeys(*capture, {"save_directory", "warmup_frames"}, "capture");
   }
 
   if (const auto* processing = table["processing"].as_table()) {
@@ -113,8 +113,8 @@ void validateValues(const AppConfig& config) {
     throw std::runtime_error("preview.window_name cannot be empty.");
   }
 
-  if (config.capture.output_filename.empty()) {
-    throw std::runtime_error("capture.output_filename cannot be empty.");
+  if (config.capture.save_directory.empty()) {
+    throw std::runtime_error("capture.save_directory cannot be empty.");
   }
 
   if (config.capture.warmup_frames < 0) {
@@ -147,8 +147,8 @@ AppConfig loadConfig(const std::filesystem::path& filename) {
   readOptional(table, "preview", "rotation", config.preview.rotation);
   readOptional(table, "preview", "window_name", config.preview.window_name);
 
-  readOptional(table, "capture", "output_filename",
-               config.capture.output_filename);
+  readOptional(table, "capture", "save_directory",
+               config.capture.save_directory);
   readOptional(table, "capture", "warmup_frames", config.capture.warmup_frames);
 
   // Read new baseline-processing configuration values here.

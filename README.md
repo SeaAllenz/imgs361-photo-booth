@@ -181,7 +181,14 @@ or:
 Controls:
 
 - `i` — toggle image inversion on/off
+- `Space` - Capture the current image
 - `Esc` or `q` — quit
+
+Captured images are written to the directory specified by `capture.save_directory` in the configuration file. Filenames are automatically generated using the capture time, for example:
+
+```text
+    2026-08-21T08-06-43.png
+```
 
 The configured channel-swap baseline operation is applied before the optional inversion operation. Future operations can be added to `processFrame()` in the order desired for the processing pipeline.
 

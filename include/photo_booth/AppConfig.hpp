@@ -1,5 +1,4 @@
-#ifndef PHOTO_BOOTH_APP_CONFIG_HPP
-#define PHOTO_BOOTH_APP_CONFIG_HPP
+#pragma once
 
 #include <filesystem>
 #include <string>
@@ -32,7 +31,7 @@ struct PreviewConfig {
  * @brief Settings used when an application saves a captured image.
  */
 struct CaptureConfig {
-  std::string output_filename{"captured_image.png"};
+  std::string save_directory{"captures"};
   int warmup_frames{10};
 };
 
@@ -76,5 +75,3 @@ ImageCapture::Configuration makeImageCaptureConfiguration(
     const CameraConfig& camera_config);
 
 }  // namespace photo_booth
-
-#endif

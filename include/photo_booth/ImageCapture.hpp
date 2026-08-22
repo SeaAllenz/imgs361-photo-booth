@@ -1,5 +1,4 @@
-#ifndef PHOTO_BOOTH_IMAGE_CAPTURE_HPP
-#define PHOTO_BOOTH_IMAGE_CAPTURE_HPP
+#pragma once
 
 #include <cstdint>
 #include <iosfwd>
@@ -189,5 +188,3 @@ std::ostream& operator<<(std::ostream& output,
 std::ostream& operator<<(std::ostream& output, const ImageCapture& camera);
 
 }  // namespace photo_booth
-
-#endif

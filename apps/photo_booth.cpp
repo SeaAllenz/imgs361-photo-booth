@@ -1,9 +1,11 @@
+#include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
+#include <format>
 #include <iostream>
-#include <string>
-
 #include <opencv2/highgui.hpp>
+#include <string>
 
 #include "photo_booth/AppConfig.hpp"
 #include "photo_booth/ImageCapture.hpp"
@@ -94,6 +96,13 @@ bool handleKey(const int key, ProcessingState& state) {
   return true;
 }
 
+std::string makeTimestampFilename() {
+  const auto now = std::chrono::system_clock::now();
+
+  return std::format("{:%Y-%m-%dT%H-%M-%S}.png",
+                     std::chrono::floor<std::chrono::milliseconds>(now));
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -104,10 +113,7 @@ int main(int argc, char* argv[]) {
     std::filesystem::path config_path{"config.toml"};
 
     if (argc > 2) {
-      std::cerr
-          << "Usage: "
-          << argv[0]
-          << " [config.toml]\n";
+      std::cerr << "Usage: " << argv[0] << " [config.toml]\n";
 
       return EXIT_FAILURE;
     }
@@ -117,9 +123,7 @@ int main(int argc, char* argv[]) {
 
       if (argument == "-h" || argument == "--help") {
         std::cout
-            << "Usage: "
-            << argv[0]
-            << " [config.toml]\n\n"
+            << "Usage: " << argv[0] << " [config.toml]\n\n"
             << "Runs the semester photo-booth image-processing application.\n";
 
         return EXIT_SUCCESS;
@@ -131,20 +135,24 @@ int main(int argc, char* argv[]) {
     //
     // Load the application configuration.
     //
-    const auto config =
-        photo_booth::loadConfig(config_path);
+    const auto config = photo_booth::loadConfig(config_path);
+
+    //
+    // Create the save directory if it does not already exist.
+    //
+    const std::filesystem::path save_directory{config.capture.save_directory};
+
+    std::filesystem::create_directories(save_directory);
+    std::cout << "Capture directory: " << save_directory << '\n';
 
     //
     // Configure and open the camera.
     //
     photo_booth::ImageCapture camera(
-        photo_booth::makeImageCaptureConfiguration(
-            config.camera));
+        photo_booth::makeImageCaptureConfiguration(config.camera));
 
     if (!camera.open()) {
-      std::cerr
-          << camera.errorMessage()
-          << '\n';
+      std::cerr << camera.errorMessage() << '\n';
 
       return EXIT_FAILURE;
     }
@@ -190,6 +198,16 @@ int main(int argc, char* argv[]) {
       if (!handleKey(key, processing_state)) {
         break;
       }
+
+      if (key == ' ') {                                          
+        const auto filename = save_directory / makeTimestampFilename();
+                                                                 
+        if (cv::imwrite(filename.string(), processed_frame)) {
+          std::cout << "Captured: " << filename << '\n';
+        } else {                     
+          std::cerr << "Failed to save image: " << filename << '\n';
+        }                                                        
+      }                                                            
     }
 
     cv::destroyAllWindows();
