@@ -143,7 +143,7 @@ rotation = 0
 window_name = "Photo Booth"
 
 [capture]
-output_filename = "captured_image.png"
+save_directory = "captures"
 warmup_frames = 10
 
 [processing]
