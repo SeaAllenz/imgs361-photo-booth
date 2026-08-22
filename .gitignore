@@ -10,7 +10,6 @@ compile_commands.json
 *.swp
 .vscode/
 .idea/
-.DS_Store
 
 # Compiled files
 *.o
@@ -20,3 +19,10 @@ compile_commands.json
 *.dylib
 *.dll
 *.exe
+
+# Created data
+captures/
+
+# Miscellaneous macOS AppleDouble files
+.DS_Store
+._*
