@@ -181,8 +181,11 @@ or:
 Controls:
 
 - `i` — toggle image inversion on/off
+- `p` — toggle the performance overlay on/off
 - `Space` — save the current processed image
 - `Esc` or `q` — quit
+
+The performance overlay displays the effective application frame rate in the preview window. The reported frame rate reflects the complete acquisition, processing, analysis, and display loop, so computationally expensive operations may reduce the displayed FPS. The overlay is added only to the preview image and does not modify the processed image.
 
 Captured images are written to the directory specified by capture.save_directory using timestamp-based filenames.                                               
 

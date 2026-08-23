@@ -5,6 +5,8 @@
 #include <format>
 #include <iostream>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 #include <string>
 
 #include "photo_booth/AppConfig.hpp"
@@ -13,8 +15,11 @@
 
 namespace {
 
+constexpr double kFpsUpdateIntervalSeconds = 1.0;
+
 struct ProcessingState {
   bool inversion_enabled{false};
+  bool performance_overlay_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
@@ -46,7 +51,9 @@ cv::Mat processFrame(const cv::Mat& frame,
 }
 
 void showPreviewFrame(const cv::Mat& frame,
-                      const photo_booth::PreviewConfig& config) {
+                      const photo_booth::PreviewConfig& config,
+                      const bool performance_overlay_enabled,
+                      const double current_fps) {
   cv::Mat preview_frame = frame.clone();
 
   switch (config.rotation) {
@@ -70,6 +77,25 @@ void showPreviewFrame(const cv::Mat& frame,
     cv::flip(preview_frame, preview_frame, 1);
   }
 
+  //
+  // Add display-only performance information after preview transformations.
+  // This overlay does not modify the processed image.
+  //
+  if (performance_overlay_enabled) {
+    const std::string fps_text = cv::format("FPS: %.1f", current_fps);
+    const cv::Point text_origin{20, 40};
+
+    //
+    // Draw a dark outline first so the text remains readable over both
+    // bright and dark image regions.
+    //
+    cv::putText(preview_frame, fps_text, text_origin, cv::FONT_HERSHEY_SIMPLEX,
+                0.8, cv::Scalar(0, 0, 0), 4, cv::LINE_AA);
+
+    cv::putText(preview_frame, fps_text, text_origin, cv::FONT_HERSHEY_SIMPLEX,
+                0.8, cv::Scalar(255, 255, 255), 2, cv::LINE_AA);
+  }
+
   cv::imshow(config.window_name, preview_frame);
 }
 
@@ -87,6 +113,14 @@ bool handleKey(const int key, ProcessingState& state) {
       std::cout << "Image inversion: "
                 << (state.inversion_enabled ? "ON" : "OFF") << '\n';
 
+      break;
+
+    case 'p':
+    case 'P':
+      state.performance_overlay_enabled = !state.performance_overlay_enabled;
+
+      std::cout << "Performance overlay: "
+                << (state.performance_overlay_enabled ? "ON" : "OFF") << '\n';
       break;
 
     default:
@@ -170,6 +204,13 @@ int main(int argc, char* argv[]) {
     ProcessingState processing_state;
 
     //
+    // State used to measure the effective application frame rate.
+    //
+    auto fps_interval_start = std::chrono::steady_clock::now();
+    int fps_frame_count = 0;
+    double current_fps = 0.0;
+
+    //
     // Main application loop.
     //
     while (true) {
@@ -186,9 +227,28 @@ int main(int argc, char* argv[]) {
           processFrame(camera.image(), config.processing, processing_state);
 
       //
-      // Display the processed frame.
+      // Update the measured application frame rate.
       //
-      showPreviewFrame(processed_frame, config.preview);
+      ++fps_frame_count;
+
+      const auto now = std::chrono::steady_clock::now();
+
+      const double elapsed =
+          std::chrono::duration<double>(now - fps_interval_start).count();
+
+      if (elapsed >= kFpsUpdateIntervalSeconds) {
+        current_fps = fps_frame_count / elapsed;
+
+        fps_frame_count = 0;
+        fps_interval_start = now;
+      }
+
+      //
+      // Display the processed frame and optional performance overlay.
+      //
+      showPreviewFrame(processed_frame, config.preview,
+                       processing_state.performance_overlay_enabled,
+                       current_fps);
 
       //
       // Process keyboard input.
@@ -216,7 +276,6 @@ int main(int argc, char* argv[]) {
     std::cerr << "OpenCV error: " << error.what() << '\n';
 
     return EXIT_FAILURE;
-
   } catch (const std::exception& error) {
     std::cerr << "Error: " << error.what() << '\n';
 
