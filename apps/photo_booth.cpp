@@ -189,14 +189,6 @@ int main(int argc, char* argv[]) {
     const auto config = photo_booth::loadConfig(config_path);
 
     //
-    // Create the save directory if it does not already exist.
-    //
-    const std::filesystem::path save_directory{config.capture.save_directory};
-
-    std::filesystem::create_directories(save_directory);
-    std::cout << "Capture directory: " << save_directory << '\n';
-
-    //
     // Configure and open the camera.
     //
     photo_booth::ImageCapture camera(
@@ -209,6 +201,14 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << camera << '\n';
+
+    //
+    // Create the save directory if it does not already exist.
+    //
+    const std::filesystem::path save_directory{config.capture.save_directory};
+
+    std::filesystem::create_directories(save_directory);
+    std::cout << "Capture directory: " << save_directory << '\n';
 
     //
     // Create the preview window.
