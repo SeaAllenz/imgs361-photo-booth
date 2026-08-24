@@ -68,11 +68,10 @@ ffmpeg \
     -re \
     -stream_loop -1 \
     -i "${VIDEO_FILE}" \
-    -vf "scale=1280:720" \
     -r 30 \
     -c:v mjpeg \
     -pix_fmt yuvj420p \
-    -q:v 5 \
+    -q:v 2 \
     -f v4l2 \
     "${VIDEO_DEVICE}" \
     >"${LOG_FILE}" 2>&1 &
