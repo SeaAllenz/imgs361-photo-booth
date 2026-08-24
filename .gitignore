@@ -22,6 +22,7 @@ compile_commands.json
 
 # Created data
 captures/
+.virtual*
 
 # Miscellaneous macOS AppleDouble files
 .DS_Store

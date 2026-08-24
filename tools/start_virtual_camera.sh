@@ -64,11 +64,15 @@ echo "Device: ${VIDEO_DEVICE}"
 echo
 
 ffmpeg \
+    -loglevel error \
     -re \
     -stream_loop -1 \
     -i "${VIDEO_FILE}" \
-    -vf "scale=1280:720,format=yuv420p" \
+    -vf "scale=1280:720" \
     -r 30 \
+    -c:v mjpeg \
+    -pix_fmt yuvj420p \
+    -q:v 5 \
     -f v4l2 \
     "${VIDEO_DEVICE}" \
     >"${LOG_FILE}" 2>&1 &
