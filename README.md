@@ -123,6 +123,14 @@ build/bin/
 
 The project requests strict ISO C++20 (`CXX_EXTENSIONS OFF`) and enables common compiler warnings for both the core library and all student-facing applications.
 
+For a release build (debugging information disabled), from the project root:
+
+```sh
+rm -fr build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
 ## Configuration
 
 All applications accept one optional positional argument: the TOML configuration filename. When omitted, `config.toml` in the current working directory is used.
