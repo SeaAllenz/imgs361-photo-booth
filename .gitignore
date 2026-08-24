@@ -27,3 +27,11 @@ captures/
 # Miscellaneous macOS AppleDouble files
 .DS_Store
 ._*
+
+# Miscellaneous
+*.ORIG
+*.orig
+*.SAVE
+*.save
+*.OLD
+*.old
