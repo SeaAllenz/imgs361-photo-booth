@@ -269,6 +269,65 @@ The output filename and camera warmup count are controlled by the `[capture]` se
 
 All three applications support `--help`.
 
+## Virtual camera for Linux server development
+
+The `tools/` directory contains a virtual-camera setup for Linux systems that do not have access to a physical camera. This is useful when developing on a shared server or other remote Linux system.
+
+`start_virtual_camera.sh` uses FFmpeg to continuously feed either a video file or a still image into a `v4l2loopback` virtual camera. Video files are looped continuously, while still images are repeated to produce a continuous camera stream.
+
+By default, the script uses:
+
+- media file `tools/female_model_2_720p.mp4`
+- virtual camera device `/dev/video10`
+- output frame rate of 30 fps
+
+The media file and virtual camera device can be overridden independently from the command line:
+
+```sh
+./tools/start_virtual_camera.sh
+./tools/start_virtual_camera.sh -d /dev/video12
+./tools/start_virtual_camera.sh -f sample.mp4
+./tools/start_virtual_camera.sh -f test_image.jpg
+./tools/start_virtual_camera.sh -d /dev/video12 -f sample.mp4
+```
+
+Use `-h` to display the available command-line options:
+
+```sh
+./tools/start_virtual_camera.sh -h
+```
+
+The output image is constrained to fit within a 1280 x 720 bounding box while preserving the source aspect ratio. Media smaller than this limit is not upscaled. For example, a 1600 x 1200 source produces a 960 x 720 virtual-camera image, while a 640 x 480 source remains 640 x 480.
+
+The script reports the selected camera device, corresponding OpenCV camera index, media type, input resolution, actual virtual-camera resolution, frame rate, and FFmpeg process ID when it starts.
+
+The script requires:
+
+- FFmpeg and `ffprobe`
+- a `v4l2loopback` virtual camera device already created at the selected `/dev/videoN` device
+
+For the default `/dev/video10` device, select camera index `10` in the configuration file:
+
+```toml
+[camera]
+device = 10
+```
+
+If a different virtual camera is selected with `-d`, use the corresponding numeric camera index. For example, `/dev/video12` corresponds to:
+
+```toml
+[camera]
+device = 12
+```
+
+Stop the virtual camera with:
+
+```sh
+./tools/stop_virtual_camera.sh
+```
+
+The virtual-camera scripts are development utilities only; they are not required when a normal built-in or USB camera is available.
+
 ## ImageCapture component
 
 `ImageCapture` contains no photo-booth user-interface or image-processing behavior. It acquires camera frames and exposes the most recent frame as a `cv::Mat`.
