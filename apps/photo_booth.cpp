@@ -2,7 +2,6 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
-#include <format>
 #include <iostream>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -131,10 +130,28 @@ bool handleKey(const int key, ProcessingState& state) {
 }
 
 std::string makeTimestampFilename() {
-  const auto now = std::chrono::system_clock::now();
+    const auto now = std::chrono::system_clock::now();
 
-  return std::format("{:%Y-%m-%dT%H-%M-%S}.png",
-                     std::chrono::floor<std::chrono::milliseconds>(now));
+    const std::time_t now_time =
+        std::chrono::system_clock::to_time_t(now);
+
+    std::tm utc_time{};
+    gmtime_r(&now_time, &utc_time);
+
+    const auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()) % 1000;
+
+    std::ostringstream filename;
+
+    filename << std::put_time(&utc_time, "%Y-%m-%dT%H-%M-%S")
+             << '.'
+             << std::setw(3)
+             << std::setfill('0')
+             << milliseconds.count()
+             << ".png";
+
+    return filename.str();
 }
 
 }  // namespace
