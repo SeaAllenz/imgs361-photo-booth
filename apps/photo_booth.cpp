@@ -136,7 +136,7 @@ std::string makeTimestampFilename() {
         std::chrono::system_clock::to_time_t(now);
 
     std::tm utc_time{};
-    gmtime_r(&now_time, &utc_time);
+    gmtime_s(&utc_time, &now_time);
 
     const auto milliseconds =
         std::chrono::duration_cast<std::chrono::milliseconds>(
