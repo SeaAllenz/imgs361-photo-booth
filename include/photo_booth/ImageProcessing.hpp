@@ -23,4 +23,13 @@ cv::Mat swapRedBlueChannels(const cv::Mat& image);
  */
 cv::Mat invertImage(const cv::Mat& image);
 
+/**
+ * @brief Quantizes the intensity values of every channel of an 8-bit BGR image.
+ *
+ * Each output channel value is divided by 32. As 256/8 is 32.
+ * Then  new_intensity_value = lowerbound + (width_of_level/2)
+ * So its, new_intensity_value = (level * 32) + (16)
+ */
+cv::Mat quantization(const cv::Mat& image);
+
 }  // namespace photo_booth

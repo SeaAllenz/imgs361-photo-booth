@@ -27,6 +27,7 @@ struct ProcessingState {
   bool inversion_enabled{false};
   bool histogram_enabled{false};
   bool performance_overlay_enabled{false};
+  bool quantization_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
@@ -48,6 +49,10 @@ cv::Mat processFrame(const cv::Mat& frame,
 
   if (config.channel_swap_enabled) {
     processed_frame = photo_booth::swapRedBlueChannels(processed_frame);
+  }
+
+  if (state.quantization_enabled){
+    processed_frame = photo_booth::quantization(processed_frame);
   }
 
   return processed_frame;
@@ -125,6 +130,7 @@ void printControls() {
             << "\n"
             << "  Processing\n"
             << "    n      Toggle image negative/inversion\n"
+            << "    a      Quantize intensive values\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -165,7 +171,9 @@ bool handleKey(const int key, ProcessingState& state) {
       std::cout << "Image inversion: "
                 << (state.inversion_enabled ? "ON" : "OFF") << '\n';
       break;
-
+    case 'a':
+      state.quantization_enabled = !state.quantization_enabled;
+      break;
     //
     // Analysis and display.
     //
