@@ -27,11 +27,14 @@ struct ProcessingState {
   bool inversion_enabled{false};
   bool histogram_enabled{false};
   bool performance_overlay_enabled{false};
+  bool histEqualize_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
                      const photo_booth::ProcessingConfig& config,
-                     const ProcessingState& state) {
+                     const ProcessingState& state,
+                      const cv::Mat histogram = cv::Mat()) {
+
   cv::Mat processed_frame = frame.clone();
 
   /**
@@ -48,6 +51,14 @@ cv::Mat processFrame(const cv::Mat& frame,
 
   if (config.channel_swap_enabled) {
     processed_frame = photo_booth::swapRedBlueChannels(processed_frame);
+  }
+
+  if (state.histEqualize_enabled) {
+    if (!histogram.empty()) {
+      auto [equalizedHistogram, equalizedImage] = photo_booth::histogramEqualization(histogram, processed_frame);
+
+      processed_frame = equalizedImage;
+    }
   }
 
   return processed_frame;
@@ -125,6 +136,7 @@ void printControls() {
             << "\n"
             << "  Processing\n"
             << "    n      Toggle image negative/inversion\n"
+            << "    e      Toggle Histrogram Equalization\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -164,6 +176,13 @@ bool handleKey(const int key, ProcessingState& state) {
 
       std::cout << "Image inversion: "
                 << (state.inversion_enabled ? "ON" : "OFF") << '\n';
+      break;
+
+    case 'e':
+      state.histEqualize_enabled = !state.histEqualize_enabled;
+
+      std::cout << "Histrogram Equalization: "
+                << (state.histEqualize_enabled ? "ON" : "OFF") << '\n';
       break;
 
     //
@@ -326,6 +345,14 @@ int main(int argc, char* argv[]) {
       cv::Mat processed_frame =
           processFrame(camera.image(), config.processing, processing_state);
 
+      if (processing_state.histEqualize_enabled) {
+        auto [histogram, image] = photo_booth::calcHist(processed_frame);
+              
+        processed_frame = processFrame(camera.image(), config.processing,
+                        processing_state, histogram);
+
+      }
+
       //
       // Calculate and display the histogram, if enabled.
       //
@@ -337,7 +364,7 @@ int main(int argc, char* argv[]) {
         ++histogram_update_counter;
 
         if (histogram_update_counter >= kHistogramUpdateInterval) {
-          const cv::Mat histogram = photo_booth::calcHist(processed_frame);
+          const auto& [histogram, image] = photo_booth::calcHist(processed_frame);
 
           photo_booth::showPlot(histogram, kHistogramWindowName,
                                 "Digital Count", "Number of Pixels");
@@ -351,7 +378,6 @@ int main(int argc, char* argv[]) {
         //
         histogram_update_counter = kHistogramUpdateInterval - 1;
       }
-
       //
       // Update the measured application frame rate.
       //

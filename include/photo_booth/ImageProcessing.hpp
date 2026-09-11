@@ -1,6 +1,7 @@
 #pragma once
 
 #include <opencv2/core.hpp>
+#include <tuple>
 
 namespace photo_booth {
 
@@ -9,7 +10,7 @@ namespace photo_booth {
  *
  * Channel histograms are returned in the rows of a 3x256 CV_32S.
  */
-cv::Mat calcHist(const cv::Mat& image);
+std::tuple<cv::Mat, cv::Mat> calcHist(const cv::Mat& image);
 
 /**
  * @brief Swaps the blue and red channels of an 8-bit BGR image.
@@ -23,4 +24,10 @@ cv::Mat swapRedBlueChannels(const cv::Mat& image);
  */
 cv::Mat invertImage(const cv::Mat& image);
 
+/**
+ * @brief Spreads out high density areas an 8-bit BGR image and histrogram.
+ *
+ * Histrogram Equalization equation is used.
+ */
+std::tuple<cv::Mat, cv::Mat> histogramEqualization(const cv::Mat& histogram, const cv::Mat& image);
 }  // namespace photo_booth
