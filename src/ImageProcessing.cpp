@@ -98,8 +98,8 @@ cv::Mat histrogramMatching(const cv::Mat&histrogram, constt cv::Mat& image, cons
   auto [newblueArray, newgreenArray, newredArray] = getRgbChannelCDF(newhistogram);
 
   std::vector<int> blueMatchingPixels(256);
-  std::vector<int> greenMatchingCDF(256);
-  std::vector<int> redMatchingCDF(256);
+  std::vector<int> greenMatchingPixels(256);
+  std::vector<int> redMatchingPixels(256);
 
   //Blue
   for (int intensity = 0; intensity < 256; ++intensity){
@@ -111,19 +111,26 @@ cv::Mat histrogramMatching(const cv::Mat&histrogram, constt cv::Mat& image, cons
     //NOTE:: this is just the cdf, so you'll need the 255* thing whenever
     // -Afterwards repeat for each color channel, so red double for loop and green one
     // - then run through rows and col, make value = matchingImage -> value[0] = blueMatchingPixels, etc
-    int CDF = blueArray.at(intensity);
+    double CDF = blueArray.at(intensity);
     for (int newIntensity=0; newIntensity < 256; ++newIntensity){
-      int newCDF = newblueArray.at(newIntensity);
-      if (CDF == newCDF){
-        blueMatchingCDF.at(intensity) = newCDF;
-      }else if (newCDF > CDF){
-        int lowerCDF = CDF - (newblueArray.at(newIntensity - 1));
-        int higherCDF = (newblueArray.at(newIntensity + 1)) - CDF;
+      double newCDF = newblueArray.at(newIntensity);
+      if (newCDF > CDF){
+        double lowerCDF;
+        if (newIntensity == 0){ //Out of bounds edge
+          lowerCDF = 0.0
+        }else{
+          lowerCDF = CDF - (newblueArray.at(newIntensity - 1));
+        }
+        double higherCDF = (newblueArray.at(newIntensity)) - CDF;
 
         //Ternary opertation to see what's close to the target CDF
-        blueMatchingCDF.at(intensity) = (lowerCDF < higherCDF) ? lowerCDF: higherCDF;
+        blueMatchingPixels.at(intensity) = (lowerCDF < higherCDF) ? newIntensity - 1 : newIntensity;
+
+        break;
       }
     }
+
+
 
   }
 
@@ -156,9 +163,9 @@ std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelPi
 std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelCDF(const cv::Mat&histrogram){
   
   double blueCDF = 0.0, redCDF = 0.0, greenCDF = 0.0;
-  std::vector<int> blueArray;
-  std::vector<int> greenArray;
-  std::vector<int> redArray;
+  std::vector<double> blueArray;
+  std::vector<double> greenArray;
+  std::vector<double> redArray;
 
   for (int intensity = 0; intensity < 256; ++intensity) {
       double bluePixelCount = histogram.at<int>(0, intensity);
