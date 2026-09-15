@@ -23,19 +23,25 @@ constexpr char kHistogramWindowName[] = "Photo Booth - Histogram";
 constexpr double kFpsUpdateIntervalSeconds = 1.0;
 constexpr int kHistogramUpdateInterval = 10;
 
+
 struct ProcessingState {
   bool inversion_enabled{false};
   bool histogram_enabled{false};
   bool performance_overlay_enabled{false};
   bool histEqualize_enabled{false};
+  bool hisMatching_enabled{false};
 };
 
-cv::Mat processFrame(const cv::Mat& frame,
-                     const photo_booth::ProcessingConfig& config,
-                     const ProcessingState& state,
-                      const cv::Mat histogram = cv::Mat()) {
+std::tuple<cv::Mat, cv::Mat> processFrame(const cv::Mat& frame,
+                    const photo_booth::ProcessingConfig& config,
+                    const ProcessingState& state,
+                    const cv::Mat& histogram,
+                    const std::vector<double>& targetBlueCDF,
+                    const std::vector<double>& targetGreenCDF,
+                    const std::vector<double>& targetRedCDF) {
 
   cv::Mat processed_frame = frame.clone();
+  cv::Mat newHistogram = cv::Mat();
 
   /**
    * Image-processing operations
@@ -55,13 +61,23 @@ cv::Mat processFrame(const cv::Mat& frame,
 
   if (state.histEqualize_enabled) {
     if (!histogram.empty()) {
-      auto [equalizedHistogram, equalizedImage] = photo_booth::histogramEqualization(histogram, processed_frame);
+      auto [equalizedHistogram, equalizedFrame] = photo_booth::histogramEqualization(histogram, processed_frame);
 
-      processed_frame = equalizedImage;
+      processed_frame = equalizedFrame;
+      newHistogram = equalizedHistogram;
     }
   }
 
-  return processed_frame;
+  if (state.hisMatching_enabled) {
+    auto [matchingHistogram, matchingFrame] = photo_booth::histogramMatching(
+      histogram, processed_frame, 
+      targetBlueCDF, targetGreenCDF, targetRedCDF);
+
+    processed_frame = matchingFrame;
+    newHistogram = matchingHistogram;
+  }
+
+  return {newHistogram, processed_frame};
 }
 
 void showPreviewFrame(const cv::Mat& frame,
@@ -136,7 +152,8 @@ void printControls() {
             << "\n"
             << "  Processing\n"
             << "    n      Toggle image negative/inversion\n"
-            << "    e      Toggle Histrogram Equalization\n"
+            << "    e      Toggle Histogram Equalization\n"
+            << "    m      Toggle Histogram Matching\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -181,8 +198,15 @@ bool handleKey(const int key, ProcessingState& state) {
     case 'e':
       state.histEqualize_enabled = !state.histEqualize_enabled;
 
-      std::cout << "Histrogram Equalization: "
+      std::cout << "Histogram Equalization: "
                 << (state.histEqualize_enabled ? "ON" : "OFF") << '\n';
+      break;
+
+    case 'm':
+      state.hisMatching_enabled = !state.hisMatching_enabled;
+
+      std::cout << "Histogram Matching: "
+                << (state.hisMatching_enabled ? "ON" : "OFF") << '\n';
       break;
 
     //
@@ -329,6 +353,15 @@ int main(int argc, char* argv[]) {
     int fps_frame_count = 0;
     double current_fps = 0.0;
 
+
+    auto imported_image = photo_booth::receiveimage();
+    cv::Mat targetHistogram = photo_booth::calcHist(imported_image);
+
+    auto [targetBlueCDF, targetGreenCDF, targetRedCDF] = photo_booth::getRgbChannelCDF(
+        targetHistogram,
+        imported_image.rows * imported_image.cols
+    );
+
     //
     // Main application loop.
     //
@@ -342,16 +375,18 @@ int main(int argc, char* argv[]) {
       //
       // Apply the image-processing pipeline.
       //
-      cv::Mat processed_frame =
-          processFrame(camera.image(), config.processing, processing_state);
+      cv::Mat histogram;
 
-      if (processing_state.histEqualize_enabled) {
-        auto [histogram, image] = photo_booth::calcHist(processed_frame);
-              
-        processed_frame = processFrame(camera.image(), config.processing,
-                        processing_state, histogram);
+      if (processing_state.histogram_enabled ||
+          processing_state.histEqualize_enabled ||
+          processing_state.hisMatching_enabled) {
 
+          histogram = photo_booth::calcHist(camera.image());
       }
+
+      const auto& [newHistogram, processed_frame] =
+            processFrame(camera.image(), config.processing, processing_state, histogram,
+            targetBlueCDF, targetGreenCDF, targetRedCDF);
 
       //
       // Calculate and display the histogram, if enabled.
@@ -360,11 +395,47 @@ int main(int argc, char* argv[]) {
       // kHistogramUpdateInterval frames so the external Gnuplot display does
       // not unnecessarily limit the camera-processing frame rate.
       //
+
+      //Histogram Equalization
+      if (processing_state.histEqualize_enabled) {
+
+        ++histogram_update_counter;
+
+        if (histogram_update_counter >= kHistogramUpdateInterval) {
+          photo_booth::showPlot(newHistogram, kHistogramWindowName,
+                                "Digital Count", "Number of Pixels");
+
+          histogram_update_counter = 0;
+        }
+      }else {
+        //
+        // Prime the counter so the histogram is updated immediately the next
+        // time the display is enabled.
+        //
+        histogram_update_counter = kHistogramUpdateInterval - 1;
+      }
+
+      //Histogram Matching
+      if(processing_state.hisMatching_enabled){
+
+       ++histogram_update_counter;
+
+        if (histogram_update_counter >= kHistogramUpdateInterval) {
+
+          photo_booth::showPlot(newHistogram, kHistogramWindowName,
+                                "Digital Count", "Number of Pixels");
+
+          histogram_update_counter = 0;
+        }
+      } else {
+        histogram_update_counter = kHistogramUpdateInterval - 1;
+      }
+
+      //Histogram
       if (processing_state.histogram_enabled) {
         ++histogram_update_counter;
 
         if (histogram_update_counter >= kHistogramUpdateInterval) {
-          const auto& [histogram, image] = photo_booth::calcHist(processed_frame);
 
           photo_booth::showPlot(histogram, kHistogramWindowName,
                                 "Digital Count", "Number of Pixels");
@@ -372,10 +443,6 @@ int main(int argc, char* argv[]) {
           histogram_update_counter = 0;
         }
       } else {
-        //
-        // Prime the counter so the histogram is updated immediately the next
-        // time the display is enabled.
-        //
         histogram_update_counter = kHistogramUpdateInterval - 1;
       }
       //

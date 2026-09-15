@@ -8,6 +8,8 @@
 #include <tuple>
 #include <cmath>
 #include <iostream>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
 
 namespace photo_booth {
 
@@ -27,7 +29,7 @@ void validateImage(const cv::Mat& image, const char* function_name) {
 
 }  // namespace
 
-std::tuple<cv::Mat, cv::Mat> calcHist(const cv::Mat& image) {
+cv::Mat calcHist(const cv::Mat& image) {
   validateImage(image, "calcHist()");
 
   cv::Mat histogram = cv::Mat_<int>::zeros(3, 256);
@@ -40,7 +42,7 @@ std::tuple<cv::Mat, cv::Mat> calcHist(const cv::Mat& image) {
     }
   }
 
-  return {histogram, image};
+  return histogram;
 }
 
 cv::Mat swapRedBlueChannels(const cv::Mat& image) {
@@ -60,12 +62,12 @@ cv::Mat invertImage(const cv::Mat& image) {
 }
 
 std::tuple<cv::Mat, cv::Mat> histogramEqualization(const cv::Mat& histogram, const cv::Mat& image) {
-  validateImage(image, "HistrogramEqualizedImage()");
+  validateImage(image, "HistogramEqualizedImage()");
   
   int totalPixelCount = image.rows * image.cols;
 
   // Equalization equation for each color channel in a pixel -> intensity level
-  auto [redArray, greenArray, blueArray] = getRgbChannelPixels(histogram);
+  auto [blueArray, greenArray, redArray] = getRgbChannelPixels(histogram, totalPixelCount);
 
   // New intensities added to new histogram and image
   cv::Mat equalizedImage = image.clone();
@@ -89,54 +91,117 @@ std::tuple<cv::Mat, cv::Mat> histogramEqualization(const cv::Mat& histogram, con
 }
 
 
-cv::Mat histrogramMatching(const cv::Mat&histrogram, constt cv::Mat& image, const cv::Mat&newImage){
-  cv::Mat newHistrogram = calcHist(newImage);
+
+//Only need to be calculated once
+
+std::tuple<cv::Mat, cv::Mat> histogramMatching(const cv::Mat& histogram, const cv::Mat& image,
+                    const std::vector<double>& newblueArray, const std::vector<double>& newgreenArray, const std::vector<double>& newredArray){
+  int sourcePixelCount = image.rows * image.cols;
+
   cv::Mat matchingImage = image.clone();
   cv::Mat matchingHistogram = cv::Mat::zeros(histogram.size(), histogram.type());
 
-  auto [blueCDFArray, greenArray, redArray] = getRgbChannelCDF(histogram);
-  auto [newblueArray, newgreenArray, newredArray] = getRgbChannelCDF(newhistogram);
+  auto [blueCDFArray, greenCDFArray, redCDFArray] = getRgbChannelCDF(histogram, sourcePixelCount);
 
-  std::vector<int> blueMatchingPixels(256);
-  std::vector<int> greenMatchingPixels(256);
-  std::vector<int> redMatchingPixels(256);
+  std::vector<int> blueMatchingIntensity(256);
+  std::vector<int> greenMatchingIntensity(256);
+  std::vector<int> redMatchingIntensity(256);
 
   //Blue
   for (int intensity = 0; intensity < 256; ++intensity){
-    //Get new CDF for pixelCount -- editing equalize to return a bluearray for use
-    //loop through the newBlueArray, see which one matches, 
-    //-- while also seeing if the cdf past the histrogram cdf,
-    //--- and comparing between +1 and -1
-
-    //NOTE:: this is just the cdf, so you'll need the 255* thing whenever
-    // -Afterwards repeat for each color channel, so red double for loop and green one
-    // - then run through rows and col, make value = matchingImage -> value[0] = blueMatchingPixels, etc
-    double CDF = blueArray.at(intensity);
+    double CDF = blueCDFArray.at(intensity);
     for (int newIntensity=0; newIntensity < 256; ++newIntensity){
       double newCDF = newblueArray.at(newIntensity);
-      if (newCDF > CDF){
+      if (newCDF >= CDF){
         double lowerCDF;
         if (newIntensity == 0){ //Out of bounds edge
-          lowerCDF = 0.0
+          blueMatchingIntensity.at(intensity) = 0;
+          break;
         }else{
           lowerCDF = CDF - (newblueArray.at(newIntensity - 1));
         }
         double higherCDF = (newblueArray.at(newIntensity)) - CDF;
 
         //Ternary opertation to see what's close to the target CDF
-        blueMatchingPixels.at(intensity) = (lowerCDF < higherCDF) ? newIntensity - 1 : newIntensity;
+        blueMatchingIntensity.at(intensity) = (lowerCDF < higherCDF) ? newIntensity - 1 : newIntensity;
 
         break;
       }
     }
-
-
-
   }
 
+  //Green
+  for (int intensity = 0; intensity < 256; ++intensity){
+    double CDF = greenCDFArray.at(intensity);
+    for (int newIntensity=0; newIntensity < 256; ++newIntensity){
+      double newCDF = newgreenArray.at(newIntensity);
+      if (newCDF >= CDF){
+        double lowerCDF;
+        if (newIntensity == 0){ //Out of bounds edge
+          greenMatchingIntensity.at(intensity) = 0;
+          break;
+        }else{
+          lowerCDF = CDF - (newgreenArray.at(newIntensity - 1));
+        }
+        double higherCDF = (newgreenArray.at(newIntensity)) - CDF;
+
+        greenMatchingIntensity.at(intensity) = (lowerCDF < higherCDF) ? newIntensity - 1 : newIntensity;
+
+        break;
+      }
+    }
+  }
+
+  //Red
+  for (int intensity = 0; intensity < 256; ++intensity){
+    double CDF = redCDFArray.at(intensity);
+    for (int newIntensity=0; newIntensity < 256; ++newIntensity){
+      double newCDF = newredArray.at(newIntensity);
+      if (newCDF >= CDF){
+        double lowerCDF;
+        if (newIntensity == 0){ //Out of bounds edge
+          redMatchingIntensity.at(intensity) = 0;
+          break;
+        }else{
+          lowerCDF = CDF - (newredArray.at(newIntensity - 1));
+        }
+        double higherCDF = (newredArray.at(newIntensity)) - CDF;
+
+        redMatchingIntensity.at(intensity) = (lowerCDF < higherCDF) ? newIntensity - 1 : newIntensity;
+
+        break;
+      }
+    }
+  }
+
+  for (int row = 0; row < image.rows; ++row) {
+    for (int column = 0; column < image.cols; ++column) {
+      auto& pixel = matchingImage.at<cv::Vec3b>(row, column);
+      
+      //Blue
+      int oldBlue = pixel[0];
+      int newBlue = blueMatchingIntensity[oldBlue];
+      pixel[0] = newBlue;
+      matchingHistogram.at<int>(0, pixel[0])++;
+
+      //Green
+      int oldGreen = pixel[1];
+      int newGreen = greenMatchingIntensity[oldGreen];
+      pixel[1] = newGreen;
+      matchingHistogram.at<int>(1, pixel[1])++;
+
+      //Red 
+      int oldRed = pixel[2];
+      int newRed = redMatchingIntensity[oldRed];
+      pixel[2] = newRed;
+      matchingHistogram.at<int>(2, pixel[2])++;
+    }
+  }
+
+  return {matchingHistogram, matchingImage};
 }
 
-std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelPixels(const cv::Mat&histrogram){
+std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelPixels(const cv::Mat& histogram, const int totalPixelCount ){
   
   double blueCDF = 0.0, redCDF = 0.0, greenCDF = 0.0;
   std::vector<int> blueArray;
@@ -160,7 +225,7 @@ std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelPi
   return {blueArray, greenArray, redArray};
 }
 
-std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelCDF(const cv::Mat&histrogram){
+std::tuple<std::vector<double>, std::vector<double>, std::vector<double>> getRgbChannelCDF(const cv::Mat& histogram, const int totalPixelCount ){
   
   double blueCDF = 0.0, redCDF = 0.0, greenCDF = 0.0;
   std::vector<double> blueArray;
@@ -185,17 +250,16 @@ std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelCD
 }
 
 cv::Mat receiveimage(){
-    cv::Mat image = cv::imread("images/image.jpg");
+    std::string imagePath = "images/images.jpg";
+    cv::Mat image = cv::imread(imagePath);
+
 
     if (image.empty()) {
         std::cerr << "Could not open or find the image at path: " << imagePath << std::endl;
-        return 1;
+        return cv::Mat{};
     }
 
     std::cout << "Image loaded successfully (" << image.cols << "x" << image.rows << ")" << std::endl;
-
-    cv::imshow("Loaded Image", image);
-    cv::waitKey(0);
 
     return image;
 }
