@@ -1,6 +1,8 @@
 #pragma once
 
 #include <opencv2/core.hpp>
+#include <tuple>
+#include <vector>
 
 namespace photo_booth {
 
@@ -31,5 +33,39 @@ cv::Mat invertImage(const cv::Mat& image);
  * So its, new_intensity_value = (level * 32) + (16)
  */
 cv::Mat quantization(const cv::Mat& image);
+
+/**
+ * @brief Spreads out high density areas an 8-bit BGR image and histogram.
+ *
+ * Histogram Equalization equation is used.
+ * 
+ * Uses getRgbChannelPixels()
+ */
+cv::Mat histogramEqualization(const cv::Mat& image);
+
+/**
+ * @brief Places the pixel density into an three vector arrays by order of intensity for each color channels
+ */
+std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelPixels(const cv::Mat& histogram, const int totalPixelCount );
+
+/**
+ * @brief Swap the image intensities old the old image with the new image
+ *
+ * Histogram Matching equation is used.
+ * 
+ * Uses calcHist()
+ * Uses getRgbChannelCDF()
+ */
+cv::Mat histogramMatching(const cv::Mat& image, const cv::Mat& newImage);
+
+/**
+ * @brief Places the CDF calcuation into an three vector arrays by order of intensity for each color channels
+ */
+std::tuple<std::vector<double>, std::vector<double>, std::vector<double>> getRgbChannelCDF(const cv::Mat& histogram, const int totalPixelCount );
+
+/**
+ * @brief Helper function to take whatever image is in the images folder and return it
+ */
+cv::Mat receiveimage();
 
 }  // namespace photo_booth
