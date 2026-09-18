@@ -28,11 +28,14 @@ struct ProcessingState {
   bool histogram_enabled{false};
   bool performance_overlay_enabled{false};
   bool quantization_enabled{false};
+  bool histEqualize_enabled{false};
+  bool hisMatching_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
                      const photo_booth::ProcessingConfig& config,
-                     const ProcessingState& state) {
+                     const ProcessingState& state,
+                     const cv::Mat& newImage) {
   cv::Mat processed_frame = frame.clone();
 
   /**
@@ -53,6 +56,15 @@ cv::Mat processFrame(const cv::Mat& frame,
 
   if (state.quantization_enabled){
     processed_frame = photo_booth::quantization(processed_frame);
+  }
+
+  if(state.histEqualize_enabled){
+    processed_frame = photo_booth::histogramEqualization(processed_frame);
+  }
+
+  if(state.hisMatching_enabled){
+    processed_frame = photo_booth::histogramMatching(processed_frame, newImage);
+
   }
 
   return processed_frame;
@@ -131,6 +143,8 @@ void printControls() {
             << "  Processing\n"
             << "    n      Toggle image negative/inversion\n"
             << "    a      Quantize intensive values\n"
+            << "    e      Toggle Histogram Equalization\n"
+            << "    m      Toggle Histogram Matching\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -172,8 +186,18 @@ bool handleKey(const int key, ProcessingState& state) {
                 << (state.inversion_enabled ? "ON" : "OFF") << '\n';
       break;
     case 'a':
+    case 'A':
       state.quantization_enabled = !state.quantization_enabled;
       break;
+    case 'e':
+    case 'E':
+        state.histEqualize_enabled = !state.histEqualize_enabled;
+        break;
+
+    case 'm':
+    case 'M':
+        state.hisMatching_enabled = !state.hisMatching_enabled;
+        break;
     //
     // Analysis and display.
     //
@@ -318,6 +342,8 @@ int main(int argc, char* argv[]) {
     int fps_frame_count = 0;
     double current_fps = 0.0;
 
+    cv::Mat newImage = photo_booth::receiveimage();
+
     //
     // Main application loop.
     //
@@ -332,7 +358,7 @@ int main(int argc, char* argv[]) {
       // Apply the image-processing pipeline.
       //
       cv::Mat processed_frame =
-          processFrame(camera.image(), config.processing, processing_state);
+          processFrame(camera.image(), config.processing, processing_state, newImage);
 
       //
       // Calculate and display the histogram, if enabled.
@@ -351,13 +377,13 @@ int main(int argc, char* argv[]) {
                                 "Digital Count", "Number of Pixels");
 
           histogram_update_counter = 0;
-        }
-      } else {
+        } else {
         //
         // Prime the counter so the histogram is updated immediately the next
         // time the display is enabled.
         //
         histogram_update_counter = kHistogramUpdateInterval - 1;
+        }
       }
 
       //
