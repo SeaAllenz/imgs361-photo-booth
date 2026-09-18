@@ -58,4 +58,26 @@ cv::Mat invertImage(const cv::Mat& image) {
   return output;
 }
 
+cv::Mat quantization(const cv::Mat& image) {
+  validateImage(image, "quantization()");
+
+  cv::Mat quantizedImage = image.clone();
+
+  for (int row = 0; row < image.rows; ++row) {
+    for (int column = 0; column < image.cols; ++column) {
+      auto& value = quantizedImage.at<cv::Vec3b>(row, column);
+
+      auto levelB = value[0] / 32;
+      auto levelG = value[1] / 32;
+      auto levelR = value[2] / 32;
+
+      value[0] = (levelB * 32) + 16;
+      value[1] = (levelG * 32) + 16;
+      value[2] = (levelR * 32) + 16;
+    }
+  }
+
+  return quantizedImage;
+}
+
 }  // namespace photo_booth

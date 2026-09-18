@@ -73,7 +73,7 @@ class GnuplotWindow {
   explicit GnuplotWindow(const std::string& window_name) {
     const std::string command = "\"" + std::string(GNUPLOT_EXECUTABLE) + "\"";
 
-    pipe_ = popen(command.c_str(), "w");
+    pipe_ = _popen(command.c_str(), "w");
 
     if (pipe_ == nullptr) {
       throw std::runtime_error("Unable to start gnuplot");
@@ -91,7 +91,7 @@ class GnuplotWindow {
     if (pipe_ != nullptr) {
       std::fputs("exit\n", pipe_);
       std::fflush(pipe_);
-      ::pclose(pipe_);
+      ::_pclose(pipe_);
     }
   }
 
