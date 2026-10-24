@@ -30,6 +30,9 @@ struct ProcessingState {
   bool quantization_enabled{false};
   bool histEqualize_enabled{false};
   bool hisMatching_enabled{false};
+  bool translation_enabled{false};
+  bool scaling_enabled{false};
+  bool rotation_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
@@ -65,6 +68,18 @@ cv::Mat processFrame(const cv::Mat& frame,
   if(state.hisMatching_enabled){
     processed_frame = photo_booth::histogramMatching(processed_frame, newImage);
 
+  }
+
+  if(state.translation_enabled){
+    processed_frame = photo_booth::translateImage(processed_frame, 30, 0);
+  }
+
+  if(state.scaling_enabled){
+    processed_frame = photo_booth::scaleImage(processed_frame, 2.0, 2.0);
+  }
+
+  if(state.rotation_enabled){
+    processed_frame = photo_booth::rotateImage(processed_frame, 30.0);
   }
 
   return processed_frame;
@@ -145,6 +160,9 @@ void printControls() {
             << "    a      Quantize intensive values\n"
             << "    e      Toggle Histogram Equalization\n"
             << "    m      Toggle Histogram Matching\n"
+            << "    t      Toggle Translation"
+            << "    s      Toggle Scaling"
+            << "    r      Toggle Rotation"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -198,6 +216,28 @@ bool handleKey(const int key, ProcessingState& state) {
     case 'M':
         state.hisMatching_enabled = !state.hisMatching_enabled;
         break;
+
+    case 't':
+    case 'T':
+      state.translation_enabled = !state.translation_enabled;
+      std::cout << "Translation: "
+                << (state.translation_enabled ? "ON" : "OFF") << '\n';
+    break;
+
+    case 's':
+    case 'S':
+      state.scaling_enabled = !state.scaling_enabled;
+      std::cout << "Scaling" 
+                << (state.scaling_enabled ? "ON" : "OFF") << '\n';
+    break;
+
+    case 'r':
+    case 'R':
+      state.rotation_enabled = !state.rotation_enabled;
+      std::cout << "Rotation: " 
+                << (state.rotation_enabled ? "ON" : "OFF") << "\n";
+    break;
+
     //
     // Analysis and display.
     //

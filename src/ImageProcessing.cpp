@@ -285,5 +285,97 @@ cv::Mat receiveimage(){
     return image;
 }
 
+cv::Mat translateImage(const cv::Mat& image, int shift_x, int shift_y){
+  validateImage(image, "translateImage()");
+  cv::Mat output = cv::Mat::zeros(image.size(), image.type());
+  
+  for (int row = 0; row < output.rows; ++row) {
+    for (int column = 0; column < output.cols; ++column) {
+      int source_x = column - shift_x;
+      int source_y = row - shift_y;
+
+      // Check whether the source coordinates are inside the input, copy if so
+      if (source_x >= 0 && source_x < image.cols && source_y >= 0 && source_y < image.rows){
+        output.at<cv::Vec3b>(row, column) = image.at<cv::Vec3b>(source_y, source_x);
+      }
+    }
+}
+
+  return output;
+}
+
+cv::Mat scaleImage(const cv::Mat& image, double scale_x, double scale_y) {
+  validateImage(image, "scaleImage()");
+
+  if (!std::isfinite(scale_x) || !std::isfinite(scale_y) ||
+      scale_x <= 0.0 || scale_y <= 0.0) {
+    throw std::invalid_argument(
+        "numbers invalid - scaleImage");
+  }
+
+  cv::Mat output = cv::Mat::zeros(image.size(), image.type());
+
+  for (int row = 0; row < output.rows; ++row) {
+    for (int column = 0; column < output.cols; ++column) {
+      double source_x = column / scale_x;
+      double source_y = row / scale_y;
+
+      double nearest_x = std::round(source_x);
+      double nearest_y = std::round(source_y);
+
+      if (nearest_x >= 0 && nearest_x < image.cols &&
+          nearest_y >= 0 && nearest_y < image.rows) {
+        int source_column = static_cast<int>(nearest_x);
+        int source_row = static_cast<int>(nearest_y);
+
+        output.at<cv::Vec3b>(row, column) = image.at<cv::Vec3b>(source_row, source_column);
+      }
+    }
+  }
+
+  return output;
+}
+
+cv::Mat rotateImage(const cv::Mat& image, double angle_degrees){
+  validateImage(image, "rotateImage()");
+
+  if(!std::isfinite(angle_degrees)){
+    throw std::invalid_argument("no angle - rotateImage");
+  }
+
+  const double pi = std::acos(-1.0);
+  double radians = std::remainder(angle_degrees, 360.0) * pi / 180;
+  double cos_angle = std::cos(radians);
+  double sin_angle = std::sin(radians);
+
+  double center_x = (image.cols - 1) / 2.0;
+  double center_y = (image.rows - 1) / 2.0;
+
+  cv::Mat output = cv::Mat::zeros(image.size(), image.type());
+
+  for (int row = 0; row < output.rows; ++row) {
+    for (int column = 0; column < output.cols; ++column) {
+      double x = column - center_x;
+      double y = row - center_y;
+
+      double source_x = center_x + x * cos_angle + y * sin_angle;
+      double source_y = center_y - x * sin_angle + y * cos_angle;
+
+      double nearest_x = std::round(source_x);
+      double nearest_y = std::round(source_y);
+
+      if (nearest_x >= 0 && nearest_x < image.cols &&
+          nearest_y >= 0 && nearest_y < image.rows) {
+        int source_column = static_cast<int>(nearest_x);
+        int source_row = static_cast<int>(nearest_y);
+
+        output.at<cv::Vec3b>(row, column) = image.at<cv::Vec3b>(source_row, source_column);
+      }
+    }
+  }
+
+
+  return output;
+}
 
 }  // namespace photo_booth

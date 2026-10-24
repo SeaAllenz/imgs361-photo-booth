@@ -68,4 +68,18 @@ std::tuple<std::vector<double>, std::vector<double>, std::vector<double>> getRgb
  */
 cv::Mat receiveimage();
 
+/**
+ * @brief
+ */
+cv::Mat translateImage(const cv::Mat& image, int shift_x, int shift_y);
+
+/**
+ * @brief
+ */
+cv::Mat scaleImage(const cv::Mat& image, double scale_x, double scale_y);
+
+/**
+ * @brief
+ */
+cv::Mat rotateImage(const cv::Mat& image, double angle_degrees);
 }  // namespace photo_booth
