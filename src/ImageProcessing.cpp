@@ -378,4 +378,128 @@ cv::Mat rotateImage(const cv::Mat& image, double angle_degrees){
   return output;
 }
 
+cv::Mat perspectiveImage(const cv::Mat& image, const cv::Matx33d& map_to_source) {
+  validateImage(image, "perspectiveImage()");
+
+  cv::Mat output = cv::Mat::zeros(image.size(), image.type());
+
+  for(int row = 0; row < output.rows; row++){
+    for(int column = 0; column < output.cols; ++column){
+      double denominator = map_to_source(2,0) * column 
+      + map_to_source(2,1) * row
+      + map_to_source(2,2);
+
+      if(!std::isfinite(denominator) || std::abs(denominator) < 1e-12){continue;}
+
+      double source_x = (map_to_source(0, 0) * column 
+      + map_to_source(0, 1) * row 
+      + map_to_source(0, 2)) / denominator;
+      
+      double source_y = (map_to_source(1, 0) * column 
+      + map_to_source(1, 1) * row 
+      + map_to_source(1, 2)) / denominator;
+
+      double nearest_x = std::round(source_x);
+      double nearest_y = std::round(source_y);
+
+      if(nearest_x >= 0 && nearest_x < image.cols && nearest_y >= 0 && nearest_y < image.rows){
+        int source_column = static_cast<int>(nearest_x);
+        int source_row = static_cast<int>(nearest_y);
+
+        output.at<cv::Vec3b>(row, column) = image.at<cv::Vec3b>(source_row, source_column);
+      }
+    }
+  //map_to_source reads an entry from the matrix, OpenCV function
+  }
+  return output;
+}
+
+cv::Matx33d calculatePerspectiveMap(const std::array<cv::Point2d, 4>& source_points, const std::array<cv::Point2d, 4>& destination_points){
+  cv::Mat equations = cv::Mat::zeros(8,8, CV_64F);
+  cv::Mat targets = cv::Mat::zeros(8,1, CV_64F);
+
+  for(int i=0; i<4; i++){
+    double u = destination_points[i].x;
+    double v = destination_points[i].y;
+    double x = source_points[i].x;
+    double y = source_points[i].y;
+
+    int x_row = 2 * i;
+    int y_row = 2 * i + 1;
+
+    equations.at<double>(x_row, 0) = u;
+    equations.at<double>(x_row, 1) = v;
+    equations.at<double>(x_row, 2) = 1.0;
+    equations.at<double>(x_row, 6) = -u * x;
+    equations.at<double>(x_row, 7) = -v * x;
+    targets.at<double>(x_row, 0) = x;
+
+    equations.at<double>(y_row, 3) = u;
+    equations.at<double>(y_row, 4) = v;
+    equations.at<double>(y_row, 5) = 1.0;
+    equations.at<double>(y_row, 6) = -u * y;
+    equations.at<double>(y_row, 7) = -v * y;
+    targets.at<double>(y_row, 0) = y;
+  }
+
+  cv::Mat coefficients;
+
+  //solves equations × coefficients = targets
+  if(!cv::solve(equations, targets, coefficients, cv::DECOMP_LU)){
+    throw std::invalid_argument("calculatePerspectiveMap(): corners dont have a unique mapping");
+  }
+
+  return cv::Matx33d(
+      coefficients.at<double>(0, 0), coefficients.at<double>(1, 0),
+      coefficients.at<double>(2, 0), coefficients.at<double>(3, 0),
+      coefficients.at<double>(4, 0), coefficients.at<double>(5, 0),
+      coefficients.at<double>(6, 0), coefficients.at<double>(7, 0),
+      1.0);
+}
+
+//rows choose a direction, column decide how far to travel in that direction
+cv::Mat logPolarImage(const cv::Mat& image){
+  validateImage(image, "logPolarImage()");
+
+  double center_x = (image.cols - 1) / 2.0;
+  double center_y = (image.rows - 1) / 2.0;
+
+  //distance from the center to a corner, hpot calculates the hypotenuse of a right triangle
+  double max_radius = std::hypot(center_x, center_y);
+  //log(1 + max_radius)
+  double log_radius = std::log1p(max_radius);
+  const double pi = std::acos(-1.0);
+
+  cv::Mat output = cv::Mat::zeros(image.size(), image.type());
+
+  for(int row = 0; row < output.rows; row++){
+    for(int column = 0; column < output.cols; ++column){
+      double angle_fraction = static_cast<double>(row) / output.rows;
+      double theta = angle_fraction * 2.0 * pi;
+
+      double radius_fraction = output.cols > 1 
+      ? static_cast<double>(column) / (output.cols - 1) : 0.0;
+
+      //e^value - 1
+      double radius = std::expm1(radius_fraction * log_radius);
+
+      double source_x = center_x + radius * std::cos(theta);
+      double source_y = center_y + radius * std::sin(theta);
+
+      double nearest_x = std::round(source_x);
+      double nearest_y = std::round(source_y);
+
+      if (nearest_x >= 0 && nearest_x < image.cols
+      && nearest_y >= 0 && nearest_y < image.rows){
+        int source_column_pixel = static_cast<int>(nearest_x);
+        int source_row_pixel = static_cast<int>(nearest_y);
+
+        output.at<cv::Vec3b>(row, column) = image.at<cv::Vec3b>(source_row_pixel, source_column_pixel);
+      }
+    }
+  }
+
+  return output;
+}
+
 }  // namespace photo_booth

@@ -5,6 +5,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <string>
+#include <array>
 
 namespace photo_booth {
 

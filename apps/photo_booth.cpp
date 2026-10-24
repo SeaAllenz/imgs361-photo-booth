@@ -18,7 +18,9 @@
 
 namespace {
 
+//contexpr, happens at compile time
 constexpr char kHistogramWindowName[] = "Photo Booth - Histogram";
+constexpr char kLogPolarWindowName[] = "Photo Booth - Log Polar";
 
 constexpr double kFpsUpdateIntervalSeconds = 1.0;
 constexpr int kHistogramUpdateInterval = 10;
@@ -33,6 +35,8 @@ struct ProcessingState {
   bool translation_enabled{false};
   bool scaling_enabled{false};
   bool rotation_enabled{false};
+  bool perspective_enabled{false};
+  bool log_polar_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
@@ -82,6 +86,28 @@ cv::Mat processFrame(const cv::Mat& frame,
     processed_frame = photo_booth::rotateImage(processed_frame, 30.0);
   }
 
+  if(state.perspective_enabled){
+    double right = processed_frame.cols - 1.0;
+    double bottom = processed_frame.rows - 1.0;
+
+    std::array<cv::Point2d, 4> source_points = {
+      cv::Point2d(0.0, 0.0),
+      cv::Point2d(right, 0.0),
+      cv::Point2d(right, bottom),
+      cv::Point2d(0.0, bottom)
+    };
+
+    std::array<cv::Point2d, 4> destination_points = {
+        cv::Point2d(right * 0.2, 0.0),
+        cv::Point2d(right * 0.8, 0.0),
+        cv::Point2d(right, bottom),
+        cv::Point2d(0.0, bottom)
+    };
+
+    cv::Matx33d map_to_source = photo_booth::calculatePerspectiveMap(source_points, destination_points);
+    processed_frame = photo_booth::perspectiveImage(processed_frame, map_to_source);
+
+  }
   return processed_frame;
 }
 
@@ -148,6 +174,10 @@ void resetProcessingState(ProcessingState& state) {
   //
   state = ProcessingState{};
 
+  if(state.log_polar_enabled){
+    cv::destroyWindow(kLogPolarWindowName);
+  }
+
   std::cout << "Photo Booth RESET: All runtime processing and display options "
                "OFF\n";
 }
@@ -163,6 +193,7 @@ void printControls() {
             << "    t      Toggle Translation"
             << "    s      Toggle Scaling"
             << "    r      Toggle Rotation"
+            << "    v      Toggle Perspective Mapping"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -238,6 +269,13 @@ bool handleKey(const int key, ProcessingState& state) {
                 << (state.rotation_enabled ? "ON" : "OFF") << "\n";
     break;
 
+    case 'v':
+    case 'V':
+      state.perspective_enabled = !state.perspective_enabled;
+      std::cout << "Perspective mapping: "
+                << (state.perspective_enabled ? "ON" : "OFF") << "\n";
+      break;
+
     //
     // Analysis and display.
     //
@@ -260,7 +298,17 @@ bool handleKey(const int key, ProcessingState& state) {
       std::cout << "Performance overlay: "
                 << (state.performance_overlay_enabled ? "ON" : "OFF") << '\n';
       break;
+    
+    case 'l':
+    case 'L':
+      state.log_polar_enabled = !state.log_polar_enabled;
+      std::cout << "Log-polar analysis: "
+                << (state.log_polar_enabled ? "ON" : "OFF") << "\n";
 
+      if(!state.log_polar_enabled){
+        cv::destroyWindow(kLogPolarWindowName);
+      }
+      break;
     default:
       break;
   }
@@ -399,6 +447,11 @@ int main(int argc, char* argv[]) {
       //
       cv::Mat processed_frame =
           processFrame(camera.image(), config.processing, processing_state, newImage);
+      
+      if(processing_state.log_polar_enabled){
+        cv::Mat log_polar = photo_booth::logPolarImage(processed_frame);
+        cv::imshow(kLogPolarWindowName, log_polar);
+      }
 
       //
       // Calculate and display the histogram, if enabled.

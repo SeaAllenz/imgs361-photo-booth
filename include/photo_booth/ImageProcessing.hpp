@@ -82,4 +82,22 @@ cv::Mat scaleImage(const cv::Mat& image, double scale_x, double scale_y);
  * @brief
  */
 cv::Mat rotateImage(const cv::Mat& image, double angle_degrees);
+
+/**
+ * @brief
+ */
+cv::Mat perspectiveImage(const cv::Mat& image, const cv::Matx33d& map_to_source);
+
+/**
+ * @brief
+ * cv::Point2d stores one (x, y) pair using doubles.
+ * std::array<cv::Point2d, 4> stores exactly four points
+ * 
+ */
+cv::Matx33d calculatePerspectiveMap(const std::array<cv::Point2d, 4>& source_points, const std::array<cv::Point2d, 4>& destination_points);
+
+/**
+ * @brief
+ */
+cv::Mat logPolarImage(const cv::Mat& image);
 }  // namespace photo_booth
