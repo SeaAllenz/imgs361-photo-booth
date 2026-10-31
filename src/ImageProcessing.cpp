@@ -11,6 +11,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <algorithm>
 
 namespace photo_booth {
 
@@ -501,5 +502,61 @@ cv::Mat logPolarImage(const cv::Mat& image){
 
   return output;
 }
+
+cv::Mat spatialFilter(const cv::Mat& image, const cv::Mat& kernel, bool absolute_response){
+  validateImage(image, "spatialFilter()");
+
+  if(kernel.empty() || kernel.dims != 2 || kernel.type() != CV_64F
+  || kernel.rows % 2 == 0 || kernel.cols % 2 == 0){
+    throw std::invalid_argument("spatialFilter(): kernel must be non-empty, odd sized, and have the double variable type");
+  }
+
+  cv::Mat output = cv::Mat::zeros(image.size(), image.type());
+
+  //In what amount does the row extend if starting from the middle?
+  int half_rows = kernel.rows / 2;
+  int half_cols = kernel.cols / 2;
+
+  for (int row = 0; row < output.rows; row++){
+    for (int column = 0; column < output.cols; ++column){
+      cv::Vec3d sum(0.0, 0.0, 0.0);
+
+      for (int kernel_row = 0; kernel_row < kernel.rows; kernel_row++){
+        for (int kernel_column = 0; kernel_column < kernel.cols; ++kernel_column){
+
+          int source_row = row + kernel_row - half_rows;
+          int source_column = column + kernel_column - half_cols;
+
+          //keep amount within image bounds
+          source_row = std::clamp(source_row, 0, image.rows - 1);
+          source_column = std::clamp(source_column, 0, image.cols - 1);
+
+          auto pixel = image.at<cv::Vec3b>(source_row, source_column);
+          double weight = kernel.at<double>(kernel_row, kernel_column);
+
+          sum[0] += pixel[0] * weight;
+          sum[1] += pixel[1] * weight;
+          sum[2] += pixel[2] * weight;
+        }
+      }
+
+      auto& output_pixel = output.at<cv::Vec3b>(row, column);
+
+      //for edge detection
+      if(absolute_response){
+        sum[0] = std::abs(sum[0]);
+        sum[1] = std::abs(sum[1]);
+        sum[2] = std::abs(sum[2]);
+      }
+      //safe casting for vales potentially above 255
+      output_pixel[0] = cv::saturate_cast<uchar>(sum[0]);
+      output_pixel[1] = cv::saturate_cast<uchar>(sum[1]);
+      output_pixel[2] = cv::saturate_cast<uchar>(sum[2]);
+    }
+  }
+
+  return output;
+}
+
 
 }  // namespace photo_booth

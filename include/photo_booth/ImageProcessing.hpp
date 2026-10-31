@@ -3,6 +3,7 @@
 #include <opencv2/core.hpp>
 #include <tuple>
 #include <vector>
+#include <array>
 
 namespace photo_booth {
 
@@ -100,4 +101,10 @@ cv::Matx33d calculatePerspectiveMap(const std::array<cv::Point2d, 4>& source_poi
  * @brief
  */
 cv::Mat logPolarImage(const cv::Mat& image);
+
+/**
+ *@brief
+ */
+cv::Mat spatialFilter(const cv::Mat& image, const cv::Mat& kernel, bool absolute_response = false);
+
 }  // namespace photo_booth

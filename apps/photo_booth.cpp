@@ -10,6 +10,7 @@
 #include <opencv2/imgproc.hpp>
 #include <sstream>
 #include <string>
+#include <cmath>
 
 #include "photo_booth/AppConfig.hpp"
 #include "photo_booth/ImageCapture.hpp"
@@ -25,6 +26,15 @@ constexpr char kLogPolarWindowName[] = "Photo Booth - Log Polar";
 constexpr double kFpsUpdateIntervalSeconds = 1.0;
 constexpr int kHistogramUpdateInterval = 10;
 
+enum class SpatialFilterPreset {
+  BoxBlur,
+  GuassianBlur,
+  Sharpen,
+  HorizontalEdges,
+  VerticalEdges,
+  Custom
+};
+
 struct ProcessingState {
   bool inversion_enabled{false};
   bool histogram_enabled{false};
@@ -37,6 +47,10 @@ struct ProcessingState {
   bool rotation_enabled{false};
   bool perspective_enabled{false};
   bool log_polar_enabled{false};
+  bool spatial_filter_enabled{false};
+  SpatialFilterPreset spatial_filter_preset{SpatialFilterPreset::HorizontalEdges};
+
+  cv::Mat custom_kernel;
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
@@ -108,6 +122,55 @@ cv::Mat processFrame(const cv::Mat& frame,
     processed_frame = photo_booth::perspectiveImage(processed_frame, map_to_source);
 
   }
+
+  if(state.spatial_filter_enabled){
+    //creates a matrix filled with the number 1
+    cv::Mat kernel;
+
+    switch(state.spatial_filter_preset){
+      case SpatialFilterPreset::GuassianBlur:
+        kernel = (cv::Mat_<double>(3, 3) <<
+            1, 2, 1,
+            2, 4, 2,
+            1, 2, 1) / 16.0;
+        break;
+
+      case SpatialFilterPreset::Sharpen:
+        kernel = (cv::Mat_<double>(3, 3) <<
+             0, -1,  0,
+            -1,  5, -1,
+             0, -1,  0);
+        break;
+
+        case SpatialFilterPreset::HorizontalEdges:
+          kernel = (cv::Mat_<double>(3, 3) <<
+              -1, -2, -1,
+              0,  0,  0,
+              1,  2,  1);
+          break;
+
+      case SpatialFilterPreset::VerticalEdges:
+        kernel = (cv::Mat_<double>(3, 3) <<
+            -1, 0, 1,
+            -2, 0, 2,
+            -1, 0, 1);
+        break;
+
+      case SpatialFilterPreset::Custom:
+        kernel = state.custom_kernel;
+        break;
+
+      default:
+        kernel = cv::Mat::ones(3, 3, CV_64F) / 9.0;
+        break;
+    }
+
+    bool absolute_response = state.spatial_filter_preset == SpatialFilterPreset::HorizontalEdges
+    || state.spatial_filter_preset == SpatialFilterPreset::VerticalEdges;
+
+    processed_frame = photo_booth::spatialFilter(processed_frame, kernel, absolute_response);
+  }
+
   return processed_frame;
 }
 
@@ -194,6 +257,9 @@ void printControls() {
             << "    s      Toggle Scaling"
             << "    r      Toggle Rotation"
             << "    v      Toggle Perspective Mapping"
+            << "    f      Toggle Spacial Filtering"
+            << "    ]      Toggle through Spacial Filtering\n"
+            << "    k      Custom spatial kernel\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -205,6 +271,99 @@ void printControls() {
             << "    ?      Show controls\n"
             << "    q      Quit\n"
             << '\n';
+}
+
+cv::Mat readCustomKernel(){
+  std::cout << "Enter an odd kernel size from 1 to 15";
+
+  std::string line;
+
+  if(!std::getline(std::cin, line)){
+    return {};
+  }
+
+  std::istringstream input(line);
+  int size = 0;
+
+  if(!(input >> size) || size < 1 || size > 15 || size % 2 == 0){
+    std::cout << "Invalid kernel size. \n";
+    return {};
+  }
+
+  input >> std::ws;
+  if(!input.eof()){
+    std::cout << "Enter only one integer for the size.\n";
+    return {};
+  }
+
+  cv::Mat kernel = cv::Mat::zeros(size, size, CV_64F);
+
+  //weight
+    std::cout << "Enter " << size << " rows of " << size
+            << " weights, separated by spaces.\n";
+
+  for(int row = 0; row < size; ++row){
+    std::cout << "Row " << row + 1 << ": ";
+
+    if(!std::getline(std::cin, line)){
+      return {};
+    }
+
+    std::istringstream row_input(line);
+
+    for(int column = 0; column < size; ++column){
+      double weight;
+
+      if(!(row_input >> weight) || !std::isfinite(weight)){
+        std::cout << "Invalid or missing weight.\n";
+        return {};
+      }
+
+      kernel.at<double>(row, column) = weight;
+    }
+
+    row_input >> std::ws;
+    if(!row_input.eof()){
+      std::cout << "Too many weights in this row.\n";
+      return {};
+    }
+  }
+
+    std::cout << "Enter a divisor (1 keeps the weights unchanged): ";
+
+  if(!std::getline(std::cin, line)){
+    return {};
+  }
+
+  std::istringstream divisor_input(line);
+  double divisor;
+
+  if(!(divisor_input >> divisor) ||
+     !std::isfinite(divisor) || divisor == 0.0){
+    std::cout << "Divisor must be finite and nonzero.\n";
+    return {};
+  }
+
+  divisor_input >> std::ws;
+  if(!divisor_input.eof()){
+    std::cout << "Enter only one divisor.\n";
+    return {};
+  }
+
+  for(int row = 0; row < size; ++row){
+    for(int column = 0; column < size; ++column){
+      double weight = kernel.at<double>(row, column) / divisor;
+
+      if(!std::isfinite(weight)){
+        std::cout << "Dividing produced invalid weight.\n";
+        return {};
+      }
+
+      kernel.at<double>(row, column) = weight;
+    }
+  }
+
+  return kernel;
 }
 
 bool handleKey(const int key, ProcessingState& state) {
@@ -276,6 +435,13 @@ bool handleKey(const int key, ProcessingState& state) {
                 << (state.perspective_enabled ? "ON" : "OFF") << "\n";
       break;
 
+    case 'f':
+    case 'F':
+      state.spatial_filter_enabled = !state.spatial_filter_enabled;
+      std::cout << "Spacial Filtering: "
+                << (state.spatial_filter_enabled ? "ON" : "OFF") << "\n";
+      break;
+
     //
     // Analysis and display.
     //
@@ -309,6 +475,35 @@ bool handleKey(const int key, ProcessingState& state) {
         cv::destroyWindow(kLogPolarWindowName);
       }
       break;
+
+    //user input - Spatial Filtering
+    case ']': {
+      int next = (static_cast<int>(state.spatial_filter_preset) + 1) % 5;
+      state.spatial_filter_preset = static_cast<SpatialFilterPreset>(next);
+      state.spatial_filter_enabled = true;
+
+      const char* names[] = {
+          "Box blur", "Gaussian blur", "Sharpen",
+          "Horizontal edges", "Vertical edges"
+      };
+
+      std::cout << "Spatial Filter: " << names[next] << '\n';
+      break;
+    }
+
+    case 'k':
+    case 'K': {
+      cv::Mat kernel = readCustomKernel();
+
+      if(!kernel.empty()){
+        state.custom_kernel = kernel;
+        state.spatial_filter_preset = SpatialFilterPreset::Custom;
+        state.spatial_filter_enabled = true;
+        std::cout << "Custom spatial filter enabled.\n";
+      }
+      break;
+    }
+
     default:
       break;
   }
