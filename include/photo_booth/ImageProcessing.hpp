@@ -7,6 +7,12 @@
 
 namespace photo_booth {
 
+enum class FrequencyFilterShape {
+  Ideal,
+  Gaussian,
+  Butterworth
+};
+
 /**
  * @brief Calculates the histogram of each channel of an 8-bit BGR image.
  *
@@ -40,7 +46,6 @@ cv::Mat quantization(const cv::Mat& image);
  *
  * Histogram Equalization equation is used.
  * 
- * Uses getRgbChannelPixels()
  */
 cv::Mat histogramEqualization(const cv::Mat& image);
 
@@ -54,8 +59,6 @@ std::tuple<std::vector<int>, std::vector<int>, std::vector<int>> getRgbChannelPi
  *
  * Histogram Matching equation is used.
  * 
- * Uses calcHist()
- * Uses getRgbChannelCDF()
  */
 cv::Mat histogramMatching(const cv::Mat& image, const cv::Mat& newImage);
 
@@ -98,13 +101,25 @@ cv::Mat perspectiveImage(const cv::Mat& image, const cv::Matx33d& map_to_source)
 cv::Matx33d calculatePerspectiveMap(const std::array<cv::Point2d, 4>& source_points, const std::array<cv::Point2d, 4>& destination_points);
 
 /**
- * @brief
+ * @brief Creates a log-polar view using angle and distance from the image center.
+ *
+ * Rows represent angle, while columns represent logarithmically spaced distance.
  */
 cv::Mat logPolarImage(const cv::Mat& image);
 
 /**
- *@brief
+ *@brief Calculates each output pixel using weighted values from neighboring pixels.
+ *
+ * The kernel controls the effect. Absolute response makes negative results positive.
  */
 cv::Mat spatialFilter(const cv::Mat& image, const cv::Mat& kernel, bool absolute_response = false);
+
+/**
+ *@brief Filters image frequencies using an ideal, Gaussian, or Butterworth shape.
+ *
+ * Lowpass smooths the image, while highpass emphasizes detail.
+ * Cutoff controls the frequency boundary, and order controls Butterworth steepness.
+ */
+cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, FrequencyFilterShape shape = FrequencyFilterShape::Ideal, int order = 2);
 
 }  // namespace photo_booth

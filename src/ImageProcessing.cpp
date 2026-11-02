@@ -558,5 +558,91 @@ cv::Mat spatialFilter(const cv::Mat& image, const cv::Mat& kernel, bool absolute
   return output;
 }
 
+cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, FrequencyFilterShape shape, int order){
+  validateImage(image, "lowpassFilter()");
+
+  if(!std::isfinite(cutoff) || cutoff <= 0.0){
+    throw std::invalid_argument("cutoff must be finite and positive - lowpass");
+  }
+
+  if(order < 1){
+    throw std::invalid_argument("order must be positive - frequencyFilter");
+  }
+
+  std::vector<cv::Mat> channels;
+  cv::split(image, channels);
+
+  for(int channel = 0; channel < 3; ++channel){
+    cv::Mat float_channel;
+    channels[channel].convertTo(float_channel, CV_32F);
+
+    cv::Mat spectrum;
+    cv::dft(float_channel, spectrum, cv::DFT_COMPLEX_OUTPUT);
+
+    for(int row = 0; row < spectrum.rows; ++row){
+      int frequency_row = row <= spectrum.rows / 2 ? row : row - spectrum.rows;
+
+      double frequency_y = static_cast<double>(frequency_row) / spectrum.rows;
+
+      for(int column = 0; column < spectrum.cols; ++column){
+        int frequency_column = column <= spectrum.cols / 2 ? column: column - spectrum.cols;
+
+        double frequency_x = static_cast<double>(frequency_column) / spectrum.cols;
+
+        double distance = std::hypot(frequency_x, frequency_y);
+
+        double gain;
+
+        switch(shape){
+
+          case FrequencyFilterShape::Ideal:
+          gain = distance <= cutoff ? 1.0 : 0.0;
+          break;
+
+          case FrequencyFilterShape::Gaussian: {
+            double ratio = distance / cutoff;
+            gain = std::exp(-0.5 * ratio * ratio);
+            break;
+          }
+
+          case FrequencyFilterShape::Butterworth: {
+            if (highpass && distance == 0.0){
+              gain = 0.0;
+            }else{
+              double ratio = highpass ? cutoff / distance: distance / cutoff;
+              gain = 1.0 + std::sqrt(1.0 + std::pow(ratio, 2.0 * order));
+            }
+            break;
+          }
+
+          default:
+            throw std::invalid_argument("unsupported shape - frequencyFilter");
+        }
+
+        if(highpass && shape != FrequencyFilterShape::Butterworth){
+          gain = 1.0 - gain;
+        }
+
+        spectrum.at<cv::Vec2f>(row, column) *= static_cast<float>(gain);
+      }
+    }
+    cv::Mat reconstructed;
+    cv::idft(spectrum, reconstructed, cv::DFT_REAL_OUTPUT | cv::DFT_SCALE);
+
+    channels[channel] = reconstructed;
+  }
+  
+  cv::Mat float_output;
+  cv::merge(channels, float_output);
+
+  if(highpass){
+    //128 = grey
+    float_output += cv::Scalar::all(128.0);
+  }
+
+  cv::Mat output;
+  float_output.convertTo(output, CV_8U);
+  return output;
+}
 
 }  // namespace photo_booth

@@ -48,9 +48,14 @@ struct ProcessingState {
   bool perspective_enabled{false};
   bool log_polar_enabled{false};
   bool spatial_filter_enabled{false};
+  bool frequency_filter_enabled{false};
   SpatialFilterPreset spatial_filter_preset{SpatialFilterPreset::HorizontalEdges};
 
   cv::Mat custom_kernel;
+
+  bool frequency_highpass{false};
+  photo_booth::FrequencyFilterShape frequency_shape{
+      photo_booth::FrequencyFilterShape::Ideal};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
@@ -171,6 +176,12 @@ cv::Mat processFrame(const cv::Mat& frame,
     processed_frame = photo_booth::spatialFilter(processed_frame, kernel, absolute_response);
   }
 
+  if(state.frequency_filter_enabled){
+    processed_frame = photo_booth::frequencyFilter(
+      processed_frame, 0.1, state.frequency_highpass,
+      state.frequency_shape, 2);
+  }
+
   return processed_frame;
 }
 
@@ -235,11 +246,12 @@ void resetProcessingState(ProcessingState& state) {
   // Restore all runtime processing, analysis, and display settings to their
   // initial values. Configuration-controlled baseline operations are unchanged.
   //
-  state = ProcessingState{};
 
   if(state.log_polar_enabled){
     cv::destroyWindow(kLogPolarWindowName);
   }
+
+  state = ProcessingState{};
 
   std::cout << "Photo Booth RESET: All runtime processing and display options "
                "OFF\n";
@@ -259,7 +271,10 @@ void printControls() {
             << "    v      Toggle Perspective Mapping"
             << "    f      Toggle Spacial Filtering"
             << "    ]      Toggle through Spacial Filtering\n"
-            << "    k      Custom spatial kernel\n"
+            << "    k      Custom Spatial Kernel\n"
+            << "    d      Toggle Lowpass Filtering"
+            << "    b      Switch Frequency lowpass/highpass\n"
+            << "    g      Select Next frequency filter shape\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
@@ -442,6 +457,31 @@ bool handleKey(const int key, ProcessingState& state) {
                 << (state.spatial_filter_enabled ? "ON" : "OFF") << "\n";
       break;
 
+    case 'd':
+    case 'D':
+      state.frequency_filter_enabled = !state.frequency_filter_enabled;
+      std::cout << "Lowpass"
+                << (state.frequency_filter_enabled ? "ON" : "OFF") << '\n';
+      break;
+
+    case 'b':
+    case 'B':
+      state.frequency_highpass = !state.frequency_highpass;
+      std::cout << "Frequency mode: "
+                << (state.frequency_highpass ? "Highpass" : "Lowpass") << "\n";
+      break;
+
+    case 'g':
+    case 'G': {
+      int next = (static_cast<int>(state.frequency_shape) + 1) % 3;
+      state.frequency_shape =
+          static_cast<photo_booth::FrequencyFilterShape>(next);
+
+      const char* names[] = {"Ideal", "Gaussian", "Butterworth"};
+      std::cout << "Frequency shape: " << names[next] << '\n';
+      break;
+    }
+    
     //
     // Analysis and display.
     //
