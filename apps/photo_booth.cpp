@@ -11,6 +11,7 @@
 #include <sstream>
 #include <string>
 #include <cmath>
+#include <algorithm>
 
 #include "photo_booth/AppConfig.hpp"
 #include "photo_booth/ImageCapture.hpp"
@@ -25,6 +26,8 @@ constexpr char kLogPolarWindowName[] = "Photo Booth - Log Polar";
 
 constexpr double kFpsUpdateIntervalSeconds = 1.0;
 constexpr int kHistogramUpdateInterval = 10;
+
+constexpr char kRecoveryWindowName[] = "Photo Booth - Extracted Message";
 
 enum class SpatialFilterPreset {
   BoxBlur,
@@ -56,12 +59,18 @@ struct ProcessingState {
   bool frequency_highpass{false};
   photo_booth::FrequencyFilterShape frequency_shape{
       photo_booth::FrequencyFilterShape::Ideal};
+
+  bool embedding_enabled{false};
+  double embedding_stregnth{0.05};
+
+  bool extraction_enabled{false};
 };
 
 cv::Mat processFrame(const cv::Mat& frame,
                      const photo_booth::ProcessingConfig& config,
                      const ProcessingState& state,
-                     const cv::Mat& newImage) {
+                     const cv::Mat& newImage,
+                     const cv::Mat& dispersed) {
   cv::Mat processed_frame = frame.clone();
 
   /**
@@ -90,7 +99,6 @@ cv::Mat processFrame(const cv::Mat& frame,
 
   if(state.hisMatching_enabled){
     processed_frame = photo_booth::histogramMatching(processed_frame, newImage);
-
   }
 
   if(state.translation_enabled){
@@ -149,9 +157,9 @@ cv::Mat processFrame(const cv::Mat& frame,
 
         case SpatialFilterPreset::HorizontalEdges:
           kernel = (cv::Mat_<double>(3, 3) <<
-              -1, -2, -1,
+              -1, -2, -1, //dark
               0,  0,  0,
-              1,  2,  1);
+              1,  2,  1 /*bright*/);
           break;
 
       case SpatialFilterPreset::VerticalEdges:
@@ -178,8 +186,12 @@ cv::Mat processFrame(const cv::Mat& frame,
 
   if(state.frequency_filter_enabled){
     processed_frame = photo_booth::frequencyFilter(
-      processed_frame, 0.1, state.frequency_highpass,
+      processed_frame, 0.4, state.frequency_highpass,
       state.frequency_shape, 2);
+  }
+
+  if(state.embedding_enabled){
+    processed_frame = photo_booth::embedMessage(processed_frame, dispersed, state.embedding_stregnth);
   }
 
   return processed_frame;
@@ -251,6 +263,10 @@ void resetProcessingState(ProcessingState& state) {
     cv::destroyWindow(kLogPolarWindowName);
   }
 
+  if(state.extraction_enabled){
+    cv::destroyWindow(kRecoveryWindowName);
+  }
+
   state = ProcessingState{};
 
   std::cout << "Photo Booth RESET: All runtime processing and display options "
@@ -271,14 +287,18 @@ void printControls() {
             << "    v      Toggle Perspective Mapping"
             << "    f      Toggle Spacial Filtering"
             << "    ]      Toggle through Spacial Filtering\n"
+            << "    l      Toggle Log Polar\n"
             << "    k      Custom Spatial Kernel\n"
             << "    d      Toggle Lowpass Filtering"
             << "    b      Switch Frequency lowpass/highpass\n"
             << "    g      Select Next frequency filter shape\n"
+            << "    w      Toggle phase-dispersion message embedding\n"
+            << "    + / -  Increase/decrease embedding strength\n"
             << "\n"
             << "  Analysis / display\n"
             << "    h      Toggle histogram display\n"
             << "    p      Toggle performance overlay\n"
+            << "    u      Toggle extraction from the processed frame\n"
             << "\n"
             << "  Application\n"
             << "    Space  Capture image\n"
@@ -481,6 +501,28 @@ bool handleKey(const int key, ProcessingState& state) {
       std::cout << "Frequency shape: " << names[next] << '\n';
       break;
     }
+
+    case 'w':
+    case 'W':
+      state.embedding_enabled = !state.embedding_enabled;
+      std::cout << "Message embedding: "
+                << (state.embedding_enabled ? "ON" : "OFF") << '\n';
+      break;
+
+    case '+':
+    case '=':
+      state.embedding_stregnth =
+          std::min(0.25, state.embedding_stregnth + 0.01);
+      std::cout << "Embedding strength: "
+                << state.embedding_stregnth << '\n';
+      break;
+
+    case '-':
+      state.embedding_stregnth =
+          std::max(0.0, state.embedding_stregnth - 0.01);
+      std::cout << "Embedding strength: "
+                << state.embedding_stregnth << '\n';
+      break;
     
     //
     // Analysis and display.
@@ -666,6 +708,29 @@ int main(int argc, char* argv[]) {
     double current_fps = 0.0;
 
     cv::Mat newImage = photo_booth::receiveimage();
+    
+    //For prepareMessageIcon()
+    const cv::Mat message = photo_booth::prepareMessageIcon("media/stills/gitcat.png");
+    cv::imshow("PhotoBooth - MessageIcon", message);
+
+    const cv::Mat carrier_spectrum =
+        photo_booth::createPhaseCarrierSpectrum(message.size(), 12345);
+
+    const cv::Mat dispersed =
+        photo_booth::disperseMessage(message, carrier_spectrum);
+
+    cv::Mat dispersed_preview;
+    cv::normalize(dispersed, dispersed_preview, 0.0, 1.0, cv::NORM_MINMAX);
+
+    cv::imshow("Photo Booth - Dispersed Message", dispersed_preview);
+
+    const cv::Mat recovered =
+        photo_booth::recoverMessage(dispersed, carrier_spectrum);
+
+    cv::imshow("Photo Booth - Recovered Message", recovered);
+
+    std::cout << "Message recovery maximum error: "
+          << cv::norm(message, recovered, cv::NORM_INF) << '\n';
 
     //
     // Main application loop.
@@ -680,8 +745,16 @@ int main(int argc, char* argv[]) {
       //
       // Apply the image-processing pipeline.
       //
-      cv::Mat processed_frame =
-          processFrame(camera.image(), config.processing, processing_state, newImage);
+      cv::Mat processed_frame = processFrame(camera.image(), config.processing, processing_state, newImage, dispersed);
+
+      if(processing_state.extraction_enabled){
+        cv::Mat extracted = photo_booth::extractEmbeddedMessage(processed_frame, carrier_spectrum);
+
+        cv::Mat extracted_preview;
+        cv::normalize(extracted, extracted_preview, 0.0, 1.0, cv::NORM_MINMAX);
+
+        cv::imshow(kRecoveryWindowName, extracted_preview);
+      }
       
       if(processing_state.log_polar_enabled){
         cv::Mat log_polar = photo_booth::logPolarImage(processed_frame);

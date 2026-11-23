@@ -4,6 +4,7 @@
 #include <tuple>
 #include <vector>
 #include <array>
+#include <string>
 
 namespace photo_booth {
 
@@ -122,4 +123,33 @@ cv::Mat spatialFilter(const cv::Mat& image, const cv::Mat& kernel, bool absolute
  */
 cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, FrequencyFilterShape shape = FrequencyFilterShape::Ideal, int order = 2);
 
+/**
+ *@brief Loads an icon and prepares it as a floating-point grascale message
+ */
+cv::Mat prepareMessageIcon(const std::string& filename);
+
+/**
+ *@brief Creates a reproducible random-phase carrier in the frequency domain
+ */
+cv::Mat createPhaseCarrierSpectrum(cv::Size size, unsigned int seed);
+
+/**
+ *@brief produces dispersed patten by multiplying icons complex coefficeints by the carriers
+ */
+cv::Mat disperseMessage(const cv::Mat& message, const cv::Mat& carrier_spectrum);
+
+/**
+ *@brief Recovers a message by reversing the phase spreading with the same carrier.
+ */
+cv::Mat recoverMessage(const cv::Mat& signal, const cv::Mat& carrier_spectrum);
+
+/**
+ *@brief Adds a repeated dispersed message to an image using the selected strength.
+ */
+cv::Mat embedMessage(const cv::Mat& image, const cv::Mat& dispersed, double strength);
+
+/**
+ *@brief Averages aligned image tiles and uses the carrier to recover the embedded message.
+ */
+cv::Mat extractEmbeddedMessage(const cv::Mat& image, const cv::Mat& carrier_spectrum);
 }  // namespace photo_booth

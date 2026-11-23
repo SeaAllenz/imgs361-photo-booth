@@ -445,7 +445,7 @@ cv::Matx33d calculatePerspectiveMap(const std::array<cv::Point2d, 4>& source_poi
 
   cv::Mat coefficients;
 
-  //solves equations × coefficients = targets
+  //solves equations × targets = coefficients
   if(!cv::solve(equations, targets, coefficients, cv::DECOMP_LU)){
     throw std::invalid_argument("calculatePerspectiveMap(): corners dont have a unique mapping");
   }
@@ -484,6 +484,7 @@ cv::Mat logPolarImage(const cv::Mat& image){
       //e^value - 1
       double radius = std::expm1(radius_fraction * log_radius);
 
+      //converts distance and angle into source position
       double source_x = center_x + radius * std::cos(theta);
       double source_y = center_y + radius * std::sin(theta);
 
@@ -542,13 +543,13 @@ cv::Mat spatialFilter(const cv::Mat& image, const cv::Mat& kernel, bool absolute
 
       auto& output_pixel = output.at<cv::Vec3b>(row, column);
 
-      //for edge detection
+      //for edge detection, displaying edges in either direction
       if(absolute_response){
         sum[0] = std::abs(sum[0]);
         sum[1] = std::abs(sum[1]);
         sum[2] = std::abs(sum[2]);
       }
-      //safe casting for vales potentially above 255
+      //safe casting for vaules potentially above 255
       output_pixel[0] = cv::saturate_cast<uchar>(sum[0]);
       output_pixel[1] = cv::saturate_cast<uchar>(sum[1]);
       output_pixel[2] = cv::saturate_cast<uchar>(sum[2]);
@@ -577,6 +578,7 @@ cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, Freq
     channels[channel].convertTo(float_channel, CV_32F);
 
     cv::Mat spectrum;
+    //calculates Fourier representation
     cv::dft(float_channel, spectrum, cv::DFT_COMPLEX_OUTPUT);
 
     for(int row = 0; row < spectrum.rows; ++row){
@@ -610,7 +612,7 @@ cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, Freq
               gain = 0.0;
             }else{
               double ratio = highpass ? cutoff / distance: distance / cutoff;
-              gain = 1.0 + std::sqrt(1.0 + std::pow(ratio, 2.0 * order));
+              gain = 1.0 / std::sqrt(1.0 + std::pow(ratio, 2.0 * order));
             }
             break;
           }
@@ -627,12 +629,14 @@ cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, Freq
       }
     }
     cv::Mat reconstructed;
+    //converts back to pixel values
     cv::idft(spectrum, reconstructed, cv::DFT_REAL_OUTPUT | cv::DFT_SCALE);
 
     channels[channel] = reconstructed;
   }
   
   cv::Mat float_output;
+  //one image
   cv::merge(channels, float_output);
 
   if(highpass){
@@ -643,6 +647,179 @@ cv::Mat frequencyFilter(const cv::Mat& image, double cutoff, bool highpass, Freq
   cv::Mat output;
   float_output.convertTo(output, CV_8U);
   return output;
+}
+
+cv::Mat prepareMessageIcon(const std::string& filename){
+  cv::Mat icon = cv::imread(filename, cv::IMREAD_GRAYSCALE);
+
+  if(icon.empty()){
+    throw std::invalid_argument("couldn't load" + filename + "-prepareMessageIcon()");
+  }
+
+  cv::Mat resized;
+  cv::resize(icon, resized, cv::Size(128, 128), 0.0, 0.0, cv::INTER_AREA);
+
+  cv::Mat message;
+  resized.convertTo(message, CV_32F, 1.0 / 255.0);
+
+  return message;
+}
+
+cv::Mat createPhaseCarrierSpectrum(cv::Size size, unsigned int seed){
+  if(size.width <= 0 || size.height <= 0){
+    throw std::invalid_argument("invalid size - createPhaseEtc()");
+  }
+
+  cv::RNG random(seed);
+  cv::Mat noise(size, CV_32F);
+  random.fill(noise, cv::RNG::UNIFORM, -1.0, 1.0);
+
+  cv::Mat spectrum;
+  cv::dft(noise, spectrum, cv::DFT_COMPLEX_OUTPUT);
+
+  //Make each frequency coefficient have magnitude 1
+  for(int row = 0; row < spectrum.rows; ++row){
+    for(int column = 0; column < spectrum.cols; ++column){
+      auto& coefficient = spectrum.at<cv::Vec2f>(row, column);
+
+      float magnitude = std::hypot(coefficient[0], coefficient[1]);
+
+      if(magnitude < 1e-12f){
+        coefficient = cv::Vec2f(1.0f, 0.0f);
+      }else{
+        coefficient[0] /= magnitude;
+        coefficient[1] /= magnitude;
+      }
+    }
+  }
+
+  return spectrum;
+}
+
+cv::Mat disperseMessage(const cv::Mat& message, const cv::Mat& carrier_spectrum){
+  if(message.empty() || message.dims != 2 || message.type() != CV_32F){
+    throw std::invalid_argument("message must be a floating point grascale - disperseMessage()");
+  }
+
+  if(carrier_spectrum.type() != CV_32FC2 || carrier_spectrum.size() != message.size()){
+    throw std::invalid_argument("carrier must match message size and contain complex floats");
+  }
+
+  cv::Mat message_spectrum;
+  cv::dft(message, message_spectrum, cv::DFT_COMPLEX_OUTPUT);
+
+  for(int row = 0; row < message_spectrum.rows; row++){
+    for(int column = 0; column < message_spectrum.cols; ++column){
+      auto& coefficient = message_spectrum.at<cv::Vec2f>(row, column);
+      auto carrier = carrier_spectrum.at<cv::Vec2f>(row, column);
+
+      float a = coefficient[0];
+      float b = coefficient[1];
+      float c = carrier[0];
+      float d = carrier[1];
+
+      coefficient[0] = a * c - b * d;
+      coefficient[1] = a * d + b * c;
+    }
+  }
+
+  cv::Mat dispersed;
+  cv::idft(message_spectrum, dispersed, cv::DFT_REAL_OUTPUT | cv::DFT_SCALE);
+
+  return dispersed;
+}
+
+cv::Mat recoverMessage(const cv::Mat& signal, const cv::Mat& carrier_spectrum){
+  if(carrier_spectrum.dims != 2 || carrier_spectrum.type() != CV_32FC2){
+    throw std::invalid_argument("carrier must contain complex floats - recoverMessage()");
+  }
+
+  cv::Mat conjugate_carrier = carrier_spectrum.clone();
+
+  for(int row = 0; row < conjugate_carrier.rows; ++row){
+    for(int column = 0; column < conjugate_carrier.cols; ++column){
+      auto& coefficient = conjugate_carrier.at<cv::Vec2f>(row, column);
+
+      coefficient[1] = -coefficient[1];
+    }
+  }
+
+  return disperseMessage(signal, conjugate_carrier);
+}
+
+cv::Mat embedMessage(const cv::Mat& image, const cv::Mat& dispersed, double strength){
+  validateImage(image, "embedMessage()");
+
+  if(dispersed.empty() || dispersed.dims != 2 || dispersed.type() != CV_32F){
+    throw std::invalid_argument("dispered papttern must contain grayscale floats - embedMessage()");
+  }
+
+  if(!std::isfinite(strength) || strength < 0.0){
+    throw std::invalid_argument("strength must be finite and nonnegative - embedMessage()");
+  }
+
+  cv::Mat watermarked;
+  image.convertTo(watermarked, CV_32FC3, 1.0 / 255.0);
+
+  double pattern_mean = cv::mean(dispersed)[0];
+
+  for(int row = 0; row < watermarked.rows; row++){
+    for(int column = 0; column < watermarked.cols; ++column){
+      int pattern_row = row % dispersed.rows;
+      int pattern_column = column % dispersed.cols;
+
+      double pattern_value = dispersed.at<float>(pattern_row, pattern_column) - pattern_mean;
+
+      float contribution = static_cast<float>(strength * pattern_value);
+
+      auto& pixel = watermarked.at<cv::Vec3f>(row, column);
+
+      pixel[0] += contribution;
+      pixel[1] += contribution;
+      pixel[2] += contribution;
+    }
+  }
+
+  cv::Mat output;
+  watermarked.convertTo(output, CV_8UC3, 255.0);
+  return output;
+}
+
+cv::Mat extractEmbeddedMessage(const cv::Mat& image, const cv::Mat& carrier_spectrum){
+  validateImage(image, "extractEmbeddedMessage()");
+
+  if(carrier_spectrum.empty() || carrier_spectrum.dims != 2 ||
+     carrier_spectrum.type() != CV_32FC2){
+    throw std::invalid_argument("invalid carrier - extractEmbeddedMessage():");
+  }
+
+  if(image.rows < carrier_spectrum.rows || image.cols < carrier_spectrum.cols){
+    throw std::invalid_argument("extractEmbeddedMessage() - extractEmbeddedMessage()");
+  }
+
+  cv::Mat grayscale;
+  cv::cvtColor(image, grayscale, cv::COLOR_BGR2GRAY);
+
+  cv::Mat signal;
+  grayscale.convertTo(signal, CV_32F, 1.0 / 255.0);
+
+  cv::Mat average = cv::Mat::zeros(carrier_spectrum.size(), CV_32F);
+  int tile_count = 0;
+
+  for(int row = 0; row <= signal.rows - average.rows; row += average.rows){
+    for(int column = 0; column <= signal.cols - average.cols; column += average.cols){
+      cv::Rect tile_area(column, row, average.cols, average.rows);
+      cv::Mat tile = signal(tile_area);
+
+      average += tile;
+      ++tile_count;
+    }
+  }
+
+  average /= tile_count;
+  average -= cv::mean(average)[0];
+
+  return recoverMessage(average, carrier_spectrum);
 }
 
 }  // namespace photo_booth
